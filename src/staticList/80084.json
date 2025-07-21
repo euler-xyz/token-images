@@ -1,0 +1,38 @@
+[
+  {
+    "addressInfo": "0xE28AfD8c634946833e89ee3F122C06d7C537E8A8",
+    "chainId": 80084,
+    "name": "WETH",
+    "symbol": "WETH",
+    "decimals": 18,
+    "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2/logo.png",
+    "meta": {}
+  },
+  {
+    "addressInfo": "0x127c6d59fE30b67e81915EEA3CDcF7ae7D0f21Fb",
+    "chainId": 80084,
+    "name": "USDC",
+    "symbol": "USDC",
+    "decimals": 6,
+    "logoURI": "https://coin-images.coingecko.com/coins/images/6319/large/usdc.png?1696506694",
+    "meta": {}
+  },
+  {
+    "addressInfo": "0x4e464eDf15188BfA63F836f86546128061e92625",
+    "chainId": 80084,
+    "name": "Tether",
+    "symbol": "USDT",
+    "decimals": 6,
+    "logoURI": "https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png",
+    "meta": {}
+  },
+  {
+    "addressInfo": "0x7507c1dc16935B82698e4C63f2746A2fCf994dF8",
+    "chainId": 80084,
+    "name": "Wrapped Bera",
+    "symbol": "WBERA",
+    "decimals": 18,
+    "logoURI": "/tokens/80084/0x7507c1dc16935B82698e4C63f2746A2fCf994dF8.png",
+    "meta": {}
+  }
+]
