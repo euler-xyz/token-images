@@ -1,20 +1,20 @@
 {
-  "name": "euler-token-images",
-  "version": "1.0.0",
-  "description": "Fetch and store token images from CoinGecko",
-  "main": "index.js",
-  "scripts": {
-    "fetch-images": "bun run src/fetch-images.ts",
-    "fetch-static-images": "bun run src/fetch-static-images.ts",
-    "dev": "bun run src/fetch-images.ts",
-    "server": "bun run src/server.ts"
-  },
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "bun-types": "^1.0.0",
-    "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "hono": "^4.8.5"
-  }
+	"name": "euler-token-images",
+	"version": "1.0.0",
+	"description": "Fetch and store token images from CoinGecko",
+	"main": "index.js",
+	"scripts": {
+		"fetch-images": "bun run src/fetch-images.ts",
+		"fetch-static-images": "bun run src/fetch-static-images.ts",
+		"dev": "bun run src/fetch-images.ts",
+		"start": "bun run src/server.ts"
+	},
+	"devDependencies": {
+		"@types/node": "^20.0.0",
+		"bun-types": "^1.0.0",
+		"typescript": "^5.0.0"
+	},
+	"dependencies": {
+		"hono": "^4.8.5"
+	}
 }
