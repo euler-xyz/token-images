@@ -157,109 +157,79 @@ app.get("/sync/:chainId/status", async (c) => {
 	}
 });
 
-// Rate limit check endpoint - checks if sync is allowed without triggering it
-app.get("/token/:chainId/rate-limit", async (c) => {
-	try {
-		// Validate chainId parameter
-		const { chainId } = syncParamsSchema.parse({
-			chainId: c.req.param("chainId"),
-		});
 
-		// Get rate limit info
-		const rateLimitInfo = syncService.getRateLimitInfo(chainId);
 
-		return c.json({
-			success: true,
-			data: rateLimitInfo,
-		});
-	} catch (error) {
-		// Handle validation errors
-		if (error instanceof z.ZodError) {
-			return c.json({
-				error: "Invalid parameters ",
-				details: error.issues.map((issue) => issue.message)
-			}, 400);
-		}
+// // Route to search token images by symbol
+// app.get("/symbol/:symbol", async (c) => {
+// 	try {
+// 		// Validate parameters
+// 		const { symbol, chainId } = symbolSearchSchema.parse({
+// 			symbol: c.req.param("symbol"),
+// 			chainId: c.req.query("chainId"), // Optional query parameter
+// 		});
 
-		console.error(`Error in rate limit endpoint:`, error);
-		return c.json({
-			error: "Internal server error",
-			message: error instanceof Error ? error.message : "Unknown error"
-		}, 500);
-	}
-});
+// 		console.log(`Searching for token image by symbol: ${symbol}${chainId ? ` on chain ${chainId}` : ''}`);
 
-// Route to search token images by symbol
-app.get("/symbol/:symbol", async (c) => {
-	try {
-		// Validate parameters
-		const { symbol, chainId } = symbolSearchSchema.parse({
-			symbol: c.req.param("symbol"),
-			chainId: c.req.query("chainId"), // Optional query parameter
-		});
+// 		// Get the token list provider
+// 		const tokenListProvider = syncService.getImageProviders().getTokenListProvider();
+// 		if (!tokenListProvider) {
+// 			return c.json({
+// 				error: "Token list provider not available"
+// 			}, 503);
+// 		}
 
-		console.log(`Searching for token image by symbol: ${symbol}${chainId ? ` on chain ${chainId}` : ''}`);
+// 		// Search for image by symbol
+// 		const imageResult = await tokenListProvider.findImageBySymbol(symbol, chainId);
 
-		// Get the token list provider
-		const tokenListProvider = syncService.getImageProviders().getTokenListProvider();
-		if (!tokenListProvider) {
-			return c.json({
-				error: "Token list provider not available"
-			}, 503);
-		}
+// 		if (!imageResult || !imageResult.url) {
+// 			return c.json({
+// 				error: "Token image not found",
+// 				message: `No image found for symbol "${symbol}"${chainId ? ` on chain ${chainId}` : ''}`
+// 			}, 404);
+// 		}
 
-		// Search for image by symbol
-		const imageResult = await tokenListProvider.findImageBySymbol(symbol, chainId);
+// 		// Fetch the image from the URL
+// 		console.log(`Fetching image from: ${imageResult.url}`);
+// 		const imageResponse = await fetch(imageResult.url);
 
-		if (!imageResult || !imageResult.url) {
-			return c.json({
-				error: "Token image not found",
-				message: `No image found for symbol "${symbol}"${chainId ? ` on chain ${chainId}` : ''}`
-			}, 404);
-		}
+// 		if (!imageResponse.ok) {
+// 			return c.json({
+// 				error: "Failed to fetch image",
+// 				message: `Failed to fetch image from ${imageResult.url}`
+// 			}, 502);
+// 		}
 
-		// Fetch the image from the URL
-		console.log(`Fetching image from: ${imageResult.url}`);
-		const imageResponse = await fetch(imageResult.url);
+// 		// Get the image data
+// 		const imageBuffer = await imageResponse.arrayBuffer();
+// 		const contentType = getMimeType(imageResult.extension);
 
-		if (!imageResponse.ok) {
-			return c.json({
-				error: "Failed to fetch image",
-				message: `Failed to fetch image from ${imageResult.url}`
-			}, 502);
-		}
+// 		return new Response(new Uint8Array(imageBuffer), {
+// 			headers: {
+// 				"Content-Type": contentType,
+// 				"Cache-Control": "public, max-age=3600", // Cache for 1 hour
+// 				"X-Token-Provider": imageResult.provider,
+// 				"X-Token-Extension": imageResult.extension,
+// 			},
+// 		});
+// 	} catch (error) {
+// 		// Handle validation errors
+// 		if (error instanceof z.ZodError) {
+// 			return c.json({
+// 				error: "Invalid parameters",
+// 				details: error.issues.map((issue) => issue.message)
+// 			}, 400);
+// 		}
 
-		// Get the image data
-		const imageBuffer = await imageResponse.arrayBuffer();
-		const contentType = getMimeType(imageResult.extension);
-
-		return new Response(new Uint8Array(imageBuffer), {
-			headers: {
-				"Content-Type": contentType,
-				"Cache-Control": "public, max-age=3600", // Cache for 1 hour
-				"X-Token-Provider": imageResult.provider,
-				"X-Token-Extension": imageResult.extension,
-			},
-		});
-	} catch (error) {
-		// Handle validation errors
-		if (error instanceof z.ZodError) {
-			return c.json({
-				error: "Invalid parameters",
-				details: error.issues.map((issue) => issue.message)
-			}, 400);
-		}
-
-		console.error(`Error serving image by symbol:`, error);
-		return c.json({
-			error: "Internal server error",
-			message: error instanceof Error ? error.message : "Unknown error"
-		}, 500);
-	}
-});
+// 		console.error(`Error serving image by symbol:`, error);
+// 		return c.json({
+// 			error: "Internal server error",
+// 			message: error instanceof Error ? error.message : "Unknown error"
+// 		}, 500);
+// 	}
+// });
 
 // Route to serve token images
-app.get("/token/:chainId/:address", async (c) => {
+app.get("/:chainId/:address", async (c) => {
 	try {
 		// Validate parameters
 		const { chainId, address } = paramsSchema.parse({
