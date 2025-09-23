@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { isAddress } from "viem";
 import { getImageFromS3, getMimeType } from "./services/image-s3-service";
-import { SyncService } from "./services/sync-service";
+import { SyncService, type RateLimitError } from "./services/sync-service";
+import type { TokenListProvider } from "./providers/token-list-provider";
 
 const app = new Hono();
 
@@ -33,8 +34,26 @@ const syncParamsSchema = z.object({
 	}),
 });
 
+// Validation schema for symbol search endpoint
+const symbolSearchSchema = z.object({
+	symbol: z.string().min(1, "symbol is required"),
+	chainId: z.string().optional().transform((val) => {
+		if (!val) return undefined;
+		const num = Number(val);
+		if (isNaN(num) || !Number.isInteger(num) || num < 0) {
+			throw new Error("chainId must be a valid positive integer value: " + val);
+		}
+		return num;
+	}),
+});
+
 // Sync service instance
 const syncService = new SyncService();
+
+// Type guard function
+function isRateLimitError(result: any): result is RateLimitError {
+	return result && result.rateLimited === true;
+}
 
 
 // Sync endpoint - RPC style: triggers sync or returns current status
@@ -45,24 +64,41 @@ app.get("/sync/:chainId", async (c) => {
 			chainId: c.req.param("chainId"),
 		});
 
-		// Check if sync is already running or completed for this chainId
+		// Check if sync is already running for this chainId
 		const existingStatus = syncService.getSyncStatus(chainId);
 
-		if (existingStatus) {
-			console.log(`Returning existing sync status for chain ${chainId}: ${existingStatus.status}`);
+		if (existingStatus && existingStatus.status === 'running') {
+			console.log(`Returning existing running sync status for chain ${chainId}`);
 			return c.json({
 				success: true,
 				data: existingStatus,
 			});
 		}
 
-		// No existing sync, start a new one
-		console.log(`Starting new sync process for chain ${chainId}`);
-		const syncStatus = await syncService.startSync(chainId);
+		// For completed/failed syncs or no sync, attempt to start a new sync
+		// The rate limiting logic will handle whether it's allowed
+
+		// Attempt to start sync (may be new or return rate limit)
+		console.log(`Attempting to start sync process for chain ${chainId}`);
+		const syncResult = await syncService.startSync(chainId);
+
+		// Check if rate limited
+		if (isRateLimitError(syncResult)) {
+			return c.json({
+				success: false,
+				error: "Rate limit exceeded",
+				data: {
+					rateLimited: true,
+					chainId: syncResult.chainId,
+					remainingTime: syncResult.remainingTime,
+					message: syncResult.message,
+				},
+			}, 429); // 429 Too Many Requests
+		}
 
 		return c.json({
 			success: true,
-			data: syncStatus,
+			data: syncResult,
 		});
 	} catch (error) {
 		// Handle validation errors
@@ -114,6 +150,107 @@ app.get("/sync/:chainId/status", async (c) => {
 		}
 
 		console.error(`Error in sync status endpoint:`, error);
+		return c.json({
+			error: "Internal server error",
+			message: error instanceof Error ? error.message : "Unknown error"
+		}, 500);
+	}
+});
+
+// Rate limit check endpoint - checks if sync is allowed without triggering it
+app.get("/sync/:chainId/rate-limit", async (c) => {
+	try {
+		// Validate chainId parameter
+		const { chainId } = syncParamsSchema.parse({
+			chainId: c.req.param("chainId"),
+		});
+
+		// Get rate limit info
+		const rateLimitInfo = syncService.getRateLimitInfo(chainId);
+
+		return c.json({
+			success: true,
+			data: rateLimitInfo,
+		});
+	} catch (error) {
+		// Handle validation errors
+		if (error instanceof z.ZodError) {
+			return c.json({
+				error: "Invalid parameters ",
+				details: error.issues.map((issue) => issue.message)
+			}, 400);
+		}
+
+		console.error(`Error in rate limit endpoint:`, error);
+		return c.json({
+			error: "Internal server error",
+			message: error instanceof Error ? error.message : "Unknown error"
+		}, 500);
+	}
+});
+
+// Route to search token images by symbol
+app.get("/symbol/:symbol", async (c) => {
+	try {
+		// Validate parameters
+		const { symbol, chainId } = symbolSearchSchema.parse({
+			symbol: c.req.param("symbol"),
+			chainId: c.req.query("chainId"), // Optional query parameter
+		});
+
+		console.log(`Searching for token image by symbol: ${symbol}${chainId ? ` on chain ${chainId}` : ''}`);
+
+		// Get the token list provider
+		const tokenListProvider = syncService.getImageProviders().getTokenListProvider();
+		if (!tokenListProvider) {
+			return c.json({
+				error: "Token list provider not available"
+			}, 503);
+		}
+
+		// Search for image by symbol
+		const imageResult = await tokenListProvider.findImageBySymbol(symbol, chainId);
+
+		if (!imageResult || !imageResult.url) {
+			return c.json({
+				error: "Token image not found",
+				message: `No image found for symbol "${symbol}"${chainId ? ` on chain ${chainId}` : ''}`
+			}, 404);
+		}
+
+		// Fetch the image from the URL
+		console.log(`Fetching image from: ${imageResult.url}`);
+		const imageResponse = await fetch(imageResult.url);
+
+		if (!imageResponse.ok) {
+			return c.json({
+				error: "Failed to fetch image",
+				message: `Failed to fetch image from ${imageResult.url}`
+			}, 502);
+		}
+
+		// Get the image data
+		const imageBuffer = await imageResponse.arrayBuffer();
+		const contentType = getMimeType(imageResult.extension);
+
+		return new Response(new Uint8Array(imageBuffer), {
+			headers: {
+				"Content-Type": contentType,
+				"Cache-Control": "public, max-age=3600", // Cache for 1 hour
+				"X-Token-Provider": imageResult.provider,
+				"X-Token-Extension": imageResult.extension,
+			},
+		});
+	} catch (error) {
+		// Handle validation errors
+		if (error instanceof z.ZodError) {
+			return c.json({
+				error: "Invalid parameters",
+				details: error.issues.map((issue) => issue.message)
+			}, 400);
+		}
+
+		console.error(`Error serving image by symbol:`, error);
 		return c.json({
 			error: "Internal server error",
 			message: error instanceof Error ? error.message : "Unknown error"

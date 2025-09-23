@@ -34,12 +34,21 @@ export interface SyncStatus {
     };
     result?: SyncResult;
     error?: string;
+    remainingTime?: number; // milliseconds until next sync is allowed
+}
+
+export interface RateLimitError {
+    rateLimited: true;
+    chainId: number;
+    remainingTime: number; // milliseconds until next sync is allowed
+    message: string;
 }
 
 export class SyncService {
     private imageProviders: ImageProviderManager;
     private eulerApiUrl: string;
     private syncStatuses: Map<number, SyncStatus> = new Map();
+    private readonly RATE_LIMIT_MINUTES = 1;
 
     constructor() {
         this.imageProviders = new ImageProviderManager();
@@ -49,7 +58,38 @@ export class SyncService {
     }
 
     getSyncStatus(chainId: number): SyncStatus | null {
-        return this.syncStatuses.get(chainId) || null;
+        const status = this.syncStatuses.get(chainId);
+        if (!status) {
+            return null;
+        }
+
+        // Always include the current remaining time
+        return {
+            ...status,
+            remainingTime: this.calculateRemainingTime(chainId)
+        };
+    }
+
+    getImageProviders(): ImageProviderManager {
+        return this.imageProviders;
+    }
+
+    getRateLimitInfo(chainId: number): { canSync: boolean; remainingTime: number; message?: string } {
+        const rateLimitCheck = this.checkRateLimit(chainId);
+        const remainingTime = this.calculateRemainingTime(chainId);
+
+        if (rateLimitCheck) {
+            return {
+                canSync: false,
+                remainingTime,
+                message: rateLimitCheck.message,
+            };
+        }
+        return {
+            canSync: true,
+            remainingTime,
+            message: remainingTime > 0 ? `Can sync now, but next sync will be available in ${Math.ceil(remainingTime / (60 * 1000))} minute(s).` : "Can sync immediately."
+        };
     }
 
     private updateSyncStatus(chainId: number, updates: Partial<SyncStatus>): void {
@@ -59,23 +99,109 @@ export class SyncService {
         }
     }
 
-    async startSync(chainId: number): Promise<SyncStatus> {
-        // Check if sync is already running for this chainId
+    private checkRateLimit(chainId: number): RateLimitError | null {
+        const now = Date.now();
+        const rateLimitMs = this.RATE_LIMIT_MINUTES * 60 * 1000;
+
+        // Check if there's a sync currently running
+        const currentStatus = this.syncStatuses.get(chainId);
+        if (currentStatus && currentStatus.status === 'running') {
+            // For running syncs, check against start time
+            const timeDiff = now - currentStatus.startTime;
+            if (timeDiff < rateLimitMs) {
+                const remainingTime = rateLimitMs - timeDiff;
+                const remainingMinutes = Math.ceil(remainingTime / (60 * 1000));
+
+                return {
+                    rateLimited: true,
+                    chainId,
+                    remainingTime,
+                    message: `Sync is currently running. Started ${Math.floor(timeDiff / (60 * 1000))} minute(s) ago.`,
+                };
+            }
+        }
+
+        // Check if there's a completed/failed sync that's too recent
+        if (currentStatus && (currentStatus.status === 'completed' || currentStatus.status === 'failed')) {
+            const relevantTime = currentStatus.endTime || currentStatus.startTime;
+            const timeDiff = now - relevantTime;
+
+            if (timeDiff < rateLimitMs) {
+                const remainingTime = rateLimitMs - timeDiff;
+                const remainingMinutes = Math.ceil(remainingTime / (60 * 1000));
+
+                return {
+                    rateLimited: true,
+                    chainId,
+                    remainingTime,
+                    message: `Rate limit exceeded. Last sync ${currentStatus.status} ${Math.floor(timeDiff / (60 * 1000))} minute(s) ago. Please wait ${remainingMinutes} more minute(s).`,
+                };
+            }
+        }
+
+        return null; // Rate limit passed
+    }
+
+    private isRateLimitError(result: SyncStatus | RateLimitError): result is RateLimitError {
+        return 'rateLimited' in result && result.rateLimited === true;
+    }
+
+    private calculateRemainingTime(chainId: number): number {
+        const now = Date.now();
+        const rateLimitMs = this.RATE_LIMIT_MINUTES * 60 * 1000;
+        const currentStatus = this.syncStatuses.get(chainId);
+
+        if (!currentStatus) {
+            return 0; // No previous sync, can sync immediately
+        }
+
+        if (currentStatus.status === 'running') {
+            // For running syncs, calculate remaining time based on start time
+            const timeDiff = now - currentStatus.startTime;
+            return Math.max(0, rateLimitMs - timeDiff);
+        }
+
+        if (currentStatus.status === 'completed' || currentStatus.status === 'failed') {
+            // For completed/failed syncs, calculate remaining time based on end time
+            const relevantTime = currentStatus.endTime || currentStatus.startTime;
+            const timeDiff = now - relevantTime;
+            return Math.max(0, rateLimitMs - timeDiff);
+        }
+
+        return 0; // Default to no remaining time
+    }
+
+    async startSync(chainId: number): Promise<SyncStatus | RateLimitError> {
+        // Check rate limit before starting new sync (this also handles running syncs)
+        const rateLimitCheck = this.checkRateLimit(chainId);
+        if (rateLimitCheck) {
+            return rateLimitCheck;
+        }
+
+        // If we have a running sync that passed rate limit check, return it with remaining time
         const existingStatus = this.syncStatuses.get(chainId);
         if (existingStatus && existingStatus.status === 'running') {
-            return existingStatus;
+            return {
+                ...existingStatus,
+                remainingTime: this.calculateRemainingTime(chainId)
+            };
         }
+
+        // Start a new sync (old sync was either completed/failed and > 10 min ago, or no previous sync)
+        const now = Date.now();
+        console.log(`Starting new sync for chain ${chainId}`);
 
         // Initialize sync status
         const syncStatus: SyncStatus = {
             chainId,
             status: 'running',
-            startTime: Date.now(),
+            startTime: now,
             progress: {
                 phase: 'initializing',
                 current: 0,
                 total: 0,
             },
+            remainingTime: this.RATE_LIMIT_MINUTES * 60 * 1000, // Full rate limit time for new sync
         };
 
         this.syncStatuses.set(chainId, syncStatus);
@@ -219,10 +345,15 @@ export class SyncService {
 
     // Keep the original method for backward compatibility, but mark as deprecated
     async syncTokenImages(chainId: number): Promise<SyncResult> {
-        const status = await this.startSync(chainId);
+        const result = await this.startSync(chainId);
+
+        // Check if rate limited
+        if (this.isRateLimitError(result)) {
+            throw new Error(result.message);
+        }
 
         // If sync was already running, wait for it to complete
-        if (status.status === 'running') {
+        if (result.status === 'running') {
             return new Promise((resolve, reject) => {
                 const checkStatus = () => {
                     const currentStatus = this.getSyncStatus(chainId);
