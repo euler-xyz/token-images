@@ -58,11 +58,6 @@ export class ImageProviderManager {
 
             } catch (error) {
                 console.error(`Provider ${provider.name} failed for ${chainId}/${address}:`, error);
-
-                // Add delay even on error (except for the last provider)
-                if (i < this.providers.length - 1) {
-                    await delay(RATE_LIMIT_CONFIG.PROVIDER_DELAY_MS);
-                }
                 continue;
             }
         }

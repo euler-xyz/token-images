@@ -158,7 +158,7 @@ app.get("/sync/:chainId/status", async (c) => {
 });
 
 // Rate limit check endpoint - checks if sync is allowed without triggering it
-app.get("/sync/:chainId/rate-limit", async (c) => {
+app.get("/:chainId/rate-limit", async (c) => {
 	try {
 		// Validate chainId parameter
 		const { chainId } = syncParamsSchema.parse({

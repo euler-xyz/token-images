@@ -538,96 +538,80 @@ export class SyncService {
             provider?: string;
         }> = [];
 
-        // Process in batches to respect rate limits
-        const batchSize = 10;
-        for (let i = 0; i < missingTokens.length; i += batchSize) {
-            const batch = missingTokens.slice(i, i + batchSize);
-            console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(missingTokens.length / batchSize)}`);
+        // Process tokens one by one (no batching)
+        for (let i = 0; i < missingTokens.length; i++) {
+            const token = missingTokens[i];
+            console.log(`Processing token ${i + 1}/${missingTokens.length}: ${token.address}`);
 
-            const batchPromises = batch.map(async (token) => {
-                try {
-                    // Try to fetch image from providers
-                    const imageResult = await this.imageProviders.fetchImage(token.chainId, token.address);
+            try {
+                // Try to fetch image from providers
+                const imageResult = await this.imageProviders.fetchImage(token.chainId, token.address);
 
-                    if (!imageResult) {
-                        details.push({
-                            address: token.address,
-                            status: 'failed',
-                        });
-                        return { success: false };
-                    }
-
-                    // Get the image buffer (either download from URL or use existing buffer)
-                    let imageBuffer: Uint8Array | null = null;
-
-                    if (imageResult.buffer) {
-                        // Local image - already have the buffer
-                        imageBuffer = imageResult.buffer;
-                    } else if (imageResult.url) {
-                        // Remote image - need to download
-                        imageBuffer = await this.downloadImageBuffer(imageResult.url);
-                    }
-
-                    if (!imageBuffer) {
-                        details.push({
-                            address: token.address,
-                            status: 'failed',
-                            provider: imageResult.provider,
-                        });
-                        return { success: false };
-                    }
-
-                    // Upload to S3 with metadata
-                    const uploadSuccess = await uploadImageToS3(
-                        token.chainId,
-                        token.address,
-                        imageBuffer,
-                        imageResult.extension,
-                        {
-                            provider: imageResult.provider,
-                            downloadDate: new Date().toISOString(),
-                            originalUrl: imageResult.url || imageResult.path || 'unknown',
-                        }
-                    );
-
-                    if (uploadSuccess) {
-                        details.push({
-                            address: token.address,
-                            status: 'downloaded',
-                            provider: imageResult.provider,
-                        });
-                        return { success: true };
-                    } else {
-                        details.push({
-                            address: token.address,
-                            status: 'failed',
-                            provider: imageResult.provider,
-                        });
-                        return { success: false };
-                    }
-                } catch (error) {
-                    console.error(`Error processing token ${token.address}:`, error);
+                if (!imageResult) {
                     details.push({
                         address: token.address,
                         status: 'failed',
                     });
-                    return { success: false };
+                    failed++;
+                    continue;
                 }
-            });
 
-            const batchResults = await Promise.allSettled(batchPromises);
+                // Get the image buffer (either download from URL or use existing buffer)
+                let imageBuffer: Uint8Array | null = null;
 
-            batchResults.forEach((result) => {
-                if (result.status === 'fulfilled' && result.value.success) {
+                if (imageResult.buffer) {
+                    // Local image - already have the buffer
+                    imageBuffer = imageResult.buffer;
+                } else if (imageResult.url) {
+                    // Remote image - need to download
+                    imageBuffer = await this.downloadImageBuffer(imageResult.url);
+                }
+
+                if (!imageBuffer) {
+                    details.push({
+                        address: token.address,
+                        status: 'failed',
+                        provider: imageResult.provider,
+                    });
+                    failed++;
+                    continue;
+                }
+
+                // Upload to S3 with metadata
+                const uploadSuccess = await uploadImageToS3(
+                    token.chainId,
+                    token.address,
+                    imageBuffer,
+                    imageResult.extension,
+                    {
+                        provider: imageResult.provider,
+                        downloadDate: new Date().toISOString(),
+                        originalUrl: imageResult.url || imageResult.path || 'unknown',
+                    }
+                );
+
+                if (uploadSuccess) {
+                    details.push({
+                        address: token.address,
+                        status: 'downloaded',
+                        provider: imageResult.provider,
+                    });
                     downloaded++;
                 } else {
+                    details.push({
+                        address: token.address,
+                        status: 'failed',
+                        provider: imageResult.provider,
+                    });
                     failed++;
                 }
-            });
-
-            // Add delay between batches to respect rate limits
-            if (i + batchSize < missingTokens.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000));
+            } catch (error) {
+                console.error(`Error processing token ${token.address}:`, error);
+                details.push({
+                    address: token.address,
+                    status: 'failed',
+                });
+                failed++;
             }
         }
 
