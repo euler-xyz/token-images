@@ -10,7 +10,7 @@ export function delay(ms: number): Promise<void> {
  * Rate limiting configuration
  */
 export const RATE_LIMIT_CONFIG = {
-    FETCH_IMAGE_DELAY_MS: 2000,
+    FETCH_IMAGE_DELAY_MS: 1000,
     // Delay between provider calls in the fetchImage chain
     PROVIDER_DELAY_MS: 1000,
 

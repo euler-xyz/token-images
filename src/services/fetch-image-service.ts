@@ -48,19 +48,27 @@ export class ImageProviderManager {
     }
 
     async fetchImage(chainId: number, address: string): Promise<ImageResult | null> {
-        for (let i = 0; i < this.providers.length; i++) {
-            const provider = this.providers[i];
+        // Execute all providers in parallel
+        const providerPromises = this.providers.map(async (provider) => {
             try {
                 const result = await provider.fetchImage(chainId, address);
-                if (result) {
-                    return result;
-                }
-
+                return { result, provider: provider.name };
             } catch (error) {
                 console.error(`Provider ${provider.name} failed for ${chainId}/${address}:`, error);
-                continue;
+                return { result: null, provider: provider.name };
+            }
+        });
+
+        // Wait for all providers to complete
+        const results = await Promise.all(providerPromises);
+
+        // Return the first successful result (maintaining provider priority order)
+        for (const { result } of results) {
+            if (result) {
+                return result;
             }
         }
+
         return null;
     }
 

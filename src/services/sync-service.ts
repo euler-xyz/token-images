@@ -1,3 +1,4 @@
+import { delay, RATE_LIMIT_CONFIG } from "../utils";
 import { ImageProviderManager } from "./fetch-image-service";
 import { bulkCheckImagesInS3, uploadImageToS3 } from "./image-s3-service";
 export interface TokenInfo {
@@ -544,6 +545,8 @@ export class SyncService {
             console.log(`Processing token ${i + 1}/${missingTokens.length}: ${token.address}`);
 
             try {
+                // add some delay between tokens
+                await delay(RATE_LIMIT_CONFIG.FETCH_IMAGE_DELAY_MS);
                 // Try to fetch image from providers
                 const imageResult = await this.imageProviders.fetchImage(token.chainId, token.address);
 

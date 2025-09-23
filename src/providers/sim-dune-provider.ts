@@ -41,7 +41,6 @@ export class SimDuneProvider implements ImageProvider {
         }
 
         try {
-            await delay(RATE_LIMIT_CONFIG.FETCH_IMAGE_DELAY_MS);
             // Build the URL with query parameters
             const url = new URL(`${this.baseUrl}/${address.toLowerCase()}`);
             url.searchParams.append('chain_ids', chainId.toString());
