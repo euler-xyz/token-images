@@ -26,7 +26,10 @@ export class AlchemyProvider implements ImageProvider {
     name = "alchemy";
     private apiKey: string;
     private baseUrl = "https://{network}.g.alchemy.com/v2/{apiKey}";
-
+    private ignoreChains = [
+        80094,
+        43114
+    ];
     // Map chainId to Alchemy supported network names
     private chainIdToNetwork: Record<number, string> = {
         1: "eth-mainnet",
@@ -52,6 +55,10 @@ export class AlchemyProvider implements ImageProvider {
 
     async fetchImage(chainId: number, address: string): Promise<ImageResult | null> {
         if (!this.apiKey) {
+            return null;
+        }
+
+        if (this.ignoreChains.includes(chainId)) {
             return null;
         }
 

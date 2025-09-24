@@ -12,4 +12,5 @@ export interface ImageResult {
 export interface ImageProvider {
     name: string;
     fetchImage(chainId: number, address: string): Promise<ImageResult | null>;
+    isAvailable(): boolean;
 }

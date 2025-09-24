@@ -211,4 +211,9 @@ export class PendleProvider implements ImageProvider {
                 : null
         };
     }
+
+    // Utility method to check if provider is available
+    isAvailable(): boolean {
+        return true;
+    }
 }

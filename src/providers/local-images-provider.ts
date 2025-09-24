@@ -74,4 +74,9 @@ export class LocalImagesProvider implements ImageProvider {
             hasLocal: result.status === 'fulfilled' ? result.value.hasLocal : false,
         }));
     }
+
+    // Utility method to check if provider is available
+    isAvailable(): boolean {
+        return true;
+    }
 }

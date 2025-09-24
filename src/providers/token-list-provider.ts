@@ -36,6 +36,8 @@ export class TokenListProvider implements ImageProvider {
 
     constructor(tokenListUrls?: string[]) {
         this.tokenListUrls = tokenListUrls || [
+            "https://tokens.uniswap.org/",
+            "https://token-list.sushi.com/",
             "https://wispy-bird-88a7.uniswap.workers.dev/?url=http://tokens.1inch.eth.link",
             "https://gateway.ipfs.io/ipns/tokens.uniswap.org",
             "https://raw.githubusercontent.com/compound-finance/token-list/master/compound.tokenlist.json",
@@ -83,8 +85,20 @@ export class TokenListProvider implements ImageProvider {
 
                 // Find token in the list
                 const token = tokenList.tokens.find(
-                    t => t.chainId === chainId &&
-                        t.address.toLowerCase() === address.toLowerCase()
+                    t => {
+                        if (t.chainId === chainId &&
+                            t.address.toLowerCase() === address.toLowerCase() && t.logoURI) {
+                            return true;
+                        }
+                        if ("extensions" in t && t.extensions) {
+                            // ** Special case for uniswap token list **
+                            const extensions = t.extensions as { bridgeInfo: Record<string, { tokenAddress: string }> };
+                            if (extensions?.bridgeInfo && extensions?.bridgeInfo[chainId.toString()]) {
+                                return extensions.bridgeInfo[chainId.toString()]?.tokenAddress?.toLowerCase() === address.toLowerCase() && t.logoURI;
+                            }
+                        }
+                        return false;
+                    }
                 );
 
                 if (token && token.logoURI) {
@@ -108,6 +122,7 @@ export class TokenListProvider implements ImageProvider {
         }
     }
 
+    // Method to search by symbol (bonus feature)
     async findImageBySymbol(symbol: string, chainId?: number): Promise<ImageResult | null> {
         try {
             // Check all token lists for the token by symbol
@@ -142,7 +157,6 @@ export class TokenListProvider implements ImageProvider {
 
 
             }
-
             return null;
         } catch (error) {
             console.error(`TokenListProvider symbol search error for ${symbol}:`, error);
@@ -241,5 +255,10 @@ export class TokenListProvider implements ImageProvider {
                 ? Math.min(...cachedLists.map(c => now - c.timestamp))
                 : null
         };
+    }
+
+    // Utility method to check if provider is available
+    isAvailable(): boolean {
+        return true;
     }
 }

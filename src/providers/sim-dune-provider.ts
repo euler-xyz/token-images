@@ -1,4 +1,3 @@
-import { delay, RATE_LIMIT_CONFIG } from "../utils";
 import type { ImageProvider, ImageResult } from "./interface";
 
 // Sim Dune API interfaces
@@ -120,41 +119,5 @@ export class SimDuneProvider implements ImageProvider {
     // Utility method to check if provider is available
     isAvailable(): boolean {
         return !!this.apiKey;
-    }
-
-    // Utility method to test API connectivity
-    async testConnection(): Promise<boolean> {
-        if (!this.apiKey) {
-            return false;
-        }
-
-        try {
-            // Test with a known token (USDC on Base)
-            const testUrl = new URL(`${this.baseUrl}/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913`);
-            testUrl.searchParams.append('chain_ids', '8453');
-
-            const response = await fetch(testUrl.toString(), {
-                method: "GET",
-                headers: {
-                    "X-Sim-Api-Key": this.apiKey,
-                    "Content-Type": "application/json",
-                },
-            });
-
-            return response.ok;
-        } catch {
-            return false;
-        }
-    }
-
-    // Utility method to get API key status (without exposing the key)
-    getApiKeyStatus(): { configured: boolean; length?: number } {
-        if (!this.apiKey) {
-            return { configured: false };
-        }
-        return {
-            configured: true,
-            length: this.apiKey.length
-        };
     }
 }

@@ -8,13 +8,14 @@ export class CoinGeckoProvider implements ImageProvider {
 
     private chainIdToCoingeckoId: Record<number, string> = {
         1: "ethereum",
-        8453: "base",
-        1923: "sonic",
-        146: "sonic",
-        60808: "bob",
-        80094: "zksync",
-        43114: "avalanche",
         56: "binance-smart-chain",
+        146: "sonic",
+        8453: "base",
+        42161: "arbitrum-one",
+        43114: "avalanche",
+        1923: "sonic",
+        60808: "bob",
+        80094: "berachain",
         130: "unichain",
     };
 
@@ -87,5 +88,10 @@ export class CoinGeckoProvider implements ImageProvider {
         } catch {
             return 'png';
         }
+    }
+
+    // Utility method to check if provider is available
+    isAvailable(): boolean {
+        return !!this.apiKey;
     }
 }
