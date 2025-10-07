@@ -4,9 +4,6 @@
 	"description": "Fetch and store token images from CoinGecko",
 	"main": "index.js",
 	"scripts": {
-		"fetch-images": "bun run src/fetch-images.ts",
-		"fetch-static-images": "bun run src/fetch-static-images.ts",
-		"dev": "bun run src/fetch-images.ts",
 		"start": "bun run src/server.ts"
 	},
 	"devDependencies": {
@@ -15,6 +12,9 @@
 		"typescript": "^5.0.0"
 	},
 	"dependencies": {
-		"hono": "^4.8.5"
+		"@aws-sdk/client-s3": "^3.893.0",
+		"hono": "^4.8.5",
+		"viem": "^2.37.7",
+		"zod": "^4.1.11"
 	}
 }
