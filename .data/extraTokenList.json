@@ -1,0 +1,50 @@
+[
+  {
+    "addressInfo": "0x0000000000000000000000000000000000000348",
+    "chainId": 0,
+    "decimals": 6,
+    "logoURI": "",
+    "name": "USD",
+    "symbol": "USD"
+  },
+  {
+    "addressInfo": "0x00000000000000000000000000000000000003d2",
+    "chainId": 0,
+    "decimals": 18,
+    "logoURI": "",
+    "name": "EUR",
+    "symbol": "EUR"
+  },
+  {
+    "addressInfo": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "chainId": 0,
+    "decimals": 18,
+    "logoURI": "https://coin-images.coingecko.com/coins/images/279/large/ethereum.png",
+    "name": "ETH",
+    "symbol": "ETH"
+  },
+  {
+    "addressInfo": "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB",
+    "chainId": 0,
+    "decimals": 8,
+    "logoURI": "https://coin-images.coingecko.com/coins/images/1/large/bitcoin.png",
+    "name": "BTC",
+    "symbol": "BTC"
+  },
+  {
+    "addressInfo": "0x00000000000000000000000000000000000003B5",
+    "chainId": 0,
+    "decimals": 18,
+    "logoURI": "",
+    "name": "TRY",
+    "symbol": "TRY"
+  },
+  {
+    "addressInfo": "0x4200000000000000000000000000000000000042",
+    "chainId": 10,
+    "decimals": 18,
+    "logoURI": "https://raw.githubusercontent.com/AngleProtocol/angle-token-list/main/src/assets/tokens/OP.svg",
+    "name": "Optimism",
+    "symbol": "OP"
+  }
+]

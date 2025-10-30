@@ -37,7 +37,6 @@ export class TokenListProvider implements ImageProvider {
     constructor(tokenListUrls?: string[]) {
         this.tokenListUrls = tokenListUrls || [
             "https://tokens.uniswap.org/",
-            "https://token-list.sushi.com/",
             "https://wispy-bird-88a7.uniswap.workers.dev/?url=http://tokens.1inch.eth.link",
             "https://gateway.ipfs.io/ipns/tokens.uniswap.org",
             "https://raw.githubusercontent.com/compound-finance/token-list/master/compound.tokenlist.json",

@@ -4,7 +4,8 @@
 	"description": "Fetch and store token images from CoinGecko",
 	"main": "index.js",
 	"scripts": {
-		"start": "bun run src/server.ts"
+		"start": "bun run src/server.ts",
+		"migration": "bun run scripts/migration.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^20.0.0",

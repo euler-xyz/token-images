@@ -37,7 +37,7 @@ export function getMimeType(extension: string): string {
 export async function getImageFromS3(
     chainId: number,
     address: string,
-): Promise<{ buffer: Uint8Array; contentType: string } | null> {
+): Promise<{ buffer: Uint8Array; contentType: string; extension?: string } | null> {
     try {
         // Get the object directly using the known key structure
         const key = `${chainId}/${address.toLowerCase()}/image`;
@@ -71,15 +71,18 @@ export async function getImageFromS3(
 
         // Determine content type from S3 metadata or ContentType
         let contentType = response.ContentType || "application/octet-stream";
+        let extension: string | undefined = undefined;
 
         // If we have extension metadata, use it to determine the correct MIME type
         if (response.Metadata?.extension) {
+            extension = response.Metadata.extension;
             contentType = getMimeType(response.Metadata.extension);
         }
 
         return {
             buffer,
             contentType,
+            extension,
         };
     } catch (error) {
         console.error(`Error fetching image from S3 for ${chainId}/${address}:`);
