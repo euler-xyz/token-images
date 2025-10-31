@@ -43,6 +43,14 @@ function urlToExtension(url: string): string {
     }
 }
 
+function convertToAbsoluteUrl(url: string): string {
+    // Handle relative URLs that start with /tokens
+    if (url.startsWith('/tokens')) {
+        return `https://app.euler.finance${url}`;
+    }
+    return url;
+}
+
 async function ensureDir(path: string): Promise<void> {
     if (!existsSync(path)) {
         await mkdir(path, { recursive: true });
@@ -85,41 +93,46 @@ async function processToken(token: DataToken, providers: ImageProviderManager): 
         // ignore S3 errors and fallback to providers
     }
 
-    // If token has a direct logoURI and it's http(s), try it first
-    if (token.logoURI && /^https?:\/\//i.test(token.logoURI)) {
+    // If token has a direct logoURI, try it first (handle both absolute and relative URLs)
+    if (token.logoURI) {
+        const fullUrl = convertToAbsoluteUrl(token.logoURI);
         try {
-            const res = await fetch(token.logoURI);
+            console.log(`Fetching image from ${fullUrl}`);
+            const res = await fetch(fullUrl);
             if (res.ok) {
                 const arrayBuf = await res.arrayBuffer();
-                const ext = urlToExtension(token.logoURI);
+                const ext = urlToExtension(fullUrl);
                 await writeImage(chainId, address, new Uint8Array(arrayBuf), ext);
                 return { status: "fetched" };
             }
         } catch (_) {
-            // fall through to providers
+            console.error(`Error fetching image from ${fullUrl}:`, _);
+            return { status: "failed", reason: "url fetch failed" };
         }
     }
 
+    return { status: "failed", reason: "url fetch failed" };
     // Providers fallback
-    try {
-        const result = await providers.fetchImage(chainId, address);
-        if (!result) return { status: "failed", reason: "providers none" };
+    // try {
+    //     const result = await providers.fetchImage(chainId, address);
+    //     if (!result) return { status: "failed", reason: "providers none" };
 
-        let buffer: Uint8Array | null = null;
-        if (result.buffer) buffer = result.buffer;
-        else if (result.url) {
-            const r = await fetch(result.url);
-            if (!r.ok) return { status: "failed", reason: "url fetch failed" };
-            buffer = new Uint8Array(await r.arrayBuffer());
-        }
-        if (!buffer) return { status: "failed", reason: "no buffer" };
+    //     let buffer: Uint8Array | null = null;
+    //     if (result.buffer) buffer = result.buffer;
+    //     else if (result.url) {
+    //         const fullUrl = convertToAbsoluteUrl(result.url);
+    //         const r = await fetch(fullUrl);
+    //         if (!r.ok) return { status: "failed", reason: "url fetch failed" };
+    //         buffer = new Uint8Array(await r.arrayBuffer());
+    //     }
+    //     if (!buffer) return { status: "failed", reason: "no buffer" };
 
-        const ext = result.extension || (result.url ? urlToExtension(result.url) : "png");
-        await writeImage(chainId, address, buffer, ext);
-        return { status: "fetched" };
-    } catch (e) {
-        return { status: "failed", reason: (e as Error)?.message || "error" };
-    }
+    //     const ext = result.extension || (result.url ? urlToExtension(result.url) : "png");
+    //     await writeImage(chainId, address, buffer, ext);
+    //     return { status: "fetched" };
+    // } catch (e) {
+    //     return { status: "failed", reason: (e as Error)?.message || "error" };
+    // }
 }
 
 async function main() {
