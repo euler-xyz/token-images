@@ -1,0 +1,39 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "token-images.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "token-images.labels" . | nindent 4 }}
+  annotations:
+    # AWS Load Balancer Controller annotations
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/subnets: {{ .Values.ingress.subnets | quote }}
+    # IMPORTANT: Comment out group.name to avoid creating separate ALB
+    # alb.ingress.kubernetes.io/group.name: {{ .Values.ingress.groupName | default "default" }}
+    # SSL/TLS settings
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    # Health check settings
+    alb.ingress.kubernetes.io/healthcheck-path: {{ .Values.ingress.healthCheckPath | default "/health" }}
+    alb.ingress.kubernetes.io/healthcheck-port: {{ .Values.service.targetPort | quote }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | default "alb" }}
+  rules:
+  - host: {{ .Values.ingress.host }}
+    http:
+      paths:
+      - path: {{ .Values.ingress.path | default "/" }}
+        pathType: {{ .Values.ingress.pathType | default "Prefix" }}
+        backend:
+          service:
+            name: {{ include "token-images.fullname" . }}
+            port:
+              number: {{ .Values.service.port }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+{{- end }}

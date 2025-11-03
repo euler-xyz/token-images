@@ -12,6 +12,9 @@ service:
   type: ClusterIP
   port: 80
   targetPort: 4000
+  # Option 2: Use ExternalName service to point to existing ALB
+  useExternalName: false
+  externalName: "eul-dev-lb-1234567890.eu-west-1.elb.amazonaws.com"  # Replace with your ALB DNS name
 
 resources:
   limits:
@@ -34,3 +37,18 @@ secrets:
   name: "token-images-prd"  # Matches managedSecret.name in DopplerSecret
   # Optional: specify if you want to use envFrom (mounts all secrets) or individual env vars
   useEnvFrom: true
+
+# Ingress configuration for AWS ALB
+ingress:
+  enabled: true
+  className: "alb"
+  groupName: "eul-dev-lb-group"  # Group name for ALB sharing
+  subnets: "subnet-0c1704842f6ef41d1, subnet-0e76b0603f950b3fa, subnet-0a2dac517ddd5c387"
+  host: "tokens.eul.dev"
+  path: "/"
+  pathType: "Prefix"
+  healthCheckPath: "/health"  # Update this to match your app's health endpoint
+  tls:
+    - secretName: tokens-eul-dev-tls  # Create this secret with your SSL certificate
+      hosts:
+        - tokens.eul.dev
