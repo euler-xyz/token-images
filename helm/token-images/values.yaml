@@ -1,0 +1,36 @@
+# Default values for token-images chart
+namespace: "token-images"  # Namespace for all resources
+
+replicaCount: 1
+
+image:
+  repository: 740460158899.dkr.ecr.eu-west-1.amazonaws.com/token-images
+  tag: 7abaedbb3100768902f920891592b58be11e457f
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 4000
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Doppler creates Kubernetes secrets with environment variables
+# Configure the secret names here
+secrets:
+  # Name of the Kubernetes secret containing Doppler secrets
+  name: "token-images-prd"  # Matches managedSecret.name in DopplerSecret
+  # Optional: specify if you want to use envFrom (mounts all secrets) or individual env vars
+  useEnvFrom: true
