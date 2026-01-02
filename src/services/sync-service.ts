@@ -1,6 +1,6 @@
 import { delay, RATE_LIMIT_CONFIG } from "../utils";
 import { ImageProviderManager } from "./fetch-image-service";
-import { bulkCheckImagesInS3, uploadImageToS3 } from "./image-s3-service";
+import { bulkCheckImagesInStorage, uploadImageToStorage, STORAGE_MODE } from "./image-storage-service";
 export interface TokenInfo {
     address: string;
     symbol: string;
@@ -254,9 +254,9 @@ export class SyncService {
                 return;
             }
 
-            // 2. Bulk check which images already exist in S3
+            // 2. Bulk check which images already exist in storage
             this.updateSyncStatus(chainId, {
-                progress: { phase: 'checking S3', current: 0, total: tokens.length }
+                progress: { phase: `checking ${STORAGE_MODE} storage`, current: 0, total: tokens.length }
             });
 
             const tokenList = tokens.map(token => ({
@@ -264,37 +264,39 @@ export class SyncService {
                 address: token.address.toLowerCase(),
             }));
 
-            console.log(`Checking S3 for existing images...`);
-            console.log(`AWS Region: ${process.env.AWS_REGION || 'not set'}`);
-            console.log(`AWS Access Key: ${process.env.AWS_ACCESS_KEY_ID ? 'set' : 'not set'}`);
+            console.log(`Checking ${STORAGE_MODE} storage for existing images...`);
+            if (STORAGE_MODE === "s3") {
+                console.log(`AWS Region: ${process.env.AWS_REGION || 'not set'}`);
+                console.log(`AWS Access Key: ${process.env.EULER_AWS_ACCESS_KEY ? 'set' : 'not set'}`);
+            }
 
-            const existenceChecks = await bulkCheckImagesInS3(tokenList);
-            console.log(`S3 check completed`);
+            const existenceChecks = await bulkCheckImagesInStorage(tokenList);
+            console.log(`Storage check completed`);
 
-            const missingFromS3 = existenceChecks.filter(check => !check.exists);
-            const existingInS3Count = existenceChecks.length - missingFromS3.length;
+            const missingFromStorage = existenceChecks.filter(check => !check.exists);
+            const existingInStorageCount = existenceChecks.length - missingFromStorage.length;
 
-            console.log(`Found ${existingInS3Count} existing images in S3, ${missingFromS3.length} missing from S3`);
+            console.log(`Found ${existingInStorageCount} existing images in ${STORAGE_MODE} storage, ${missingFromStorage.length} missing`);
 
-            // 3. For tokens missing from S3, check if they exist locally
+            // 3. For tokens missing from storage, check if they exist in local source images
             this.updateSyncStatus(chainId, {
-                progress: { phase: 'checking local images', current: 0, total: missingFromS3.length }
+                progress: { phase: 'checking local source images', current: 0, total: missingFromStorage.length }
             });
 
-            console.log(`Checking for local images...`);
+            console.log(`Checking for local source images...`);
             const localProvider = this.imageProviders.getLocalProvider();
             const localChecks = localProvider
-                ? await localProvider.bulkCheckLocalImages(missingFromS3)
-                : missingFromS3.map(token => ({ ...token, hasLocal: false }));
+                ? await localProvider.bulkCheckLocalImages(missingFromStorage)
+                : missingFromStorage.map(token => ({ ...token, hasLocal: false }));
 
             const hasLocalImages = localChecks.filter(check => check.hasLocal);
             const stillMissingTokens = localChecks.filter(check => !check.hasLocal);
 
             console.log(`Found ${hasLocalImages.length} local images to migrate, ${stillMissingTokens.length} still missing`);
 
-            // 4. Migrate local images to S3
+            // 4. Migrate local source images to storage
             this.updateSyncStatus(chainId, {
-                progress: { phase: 'migrating local images', current: 0, total: hasLocalImages.length }
+                progress: { phase: 'migrating local source images', current: 0, total: hasLocalImages.length }
             });
             const migrationResults = await this.migrateLocalImages(hasLocalImages);
 
@@ -308,7 +310,7 @@ export class SyncService {
             const result: SyncResult = {
                 chainId,
                 totalTokens: tokens.length,
-                existingImages: existingInS3Count,
+                existingImages: existingInStorageCount,
                 migratedFromLocal: migrationResults.migrated,
                 downloadedImages: downloadResults.downloaded,
                 failedDownloads: migrationResults.failed + downloadResults.failed,
@@ -432,7 +434,7 @@ export class SyncService {
             provider?: string;
         }> = [];
 
-        console.log(`Migrating ${tokensWithLocal.length} local images to S3...`);
+        console.log(`Migrating ${tokensWithLocal.length} local source images to ${STORAGE_MODE} storage...`);
 
         // Process in batches for better performance
         const batchSize = 20;
@@ -461,8 +463,8 @@ export class SyncService {
                         return { success: false };
                     }
 
-                    // Upload to S3 with metadata indicating it was migrated from local
-                    const uploadSuccess = await uploadImageToS3(
+                    // Upload to storage with metadata indicating it was migrated from local
+                    const uploadSuccess = await uploadImageToStorage(
                         token.chainId,
                         token.address,
                         localImage.buffer,
@@ -580,8 +582,8 @@ export class SyncService {
                     continue;
                 }
 
-                // Upload to S3 with metadata
-                const uploadSuccess = await uploadImageToS3(
+                // Upload to storage with metadata
+                const uploadSuccess = await uploadImageToStorage(
                     token.chainId,
                     token.address,
                     imageBuffer,
