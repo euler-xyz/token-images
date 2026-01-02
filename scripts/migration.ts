@@ -2,7 +2,7 @@ import { readdir, readFile, mkdir, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { ImageProviderManager } from "../src/services/fetch-image-service";
-import { checkImageExistsInS3, getImageFromS3 } from "../src/services/image-s3-service";
+import { checkImageExistsInStorage, getImageFromStorage, STORAGE_MODE } from "../src/services/image-storage-service";
 
 type DataToken = {
     addressInfo?: string;
@@ -78,19 +78,19 @@ async function processToken(token: DataToken, providers: ImageProviderManager): 
     // Skip if already exists locally
     if (await hasLocalImage(chainId, address)) return { status: "skipped", reason: "local exists" };
 
-    // Try S3
+    // Try storage (S3 or local depending on config)
     try {
-        const inS3 = await checkImageExistsInS3(chainId, address);
-        if (inS3) {
-            const s3Image = await getImageFromS3(chainId, address);
-            if (s3Image && s3Image.buffer) {
-                const ext = s3Image.extension || contentTypeToExtension(s3Image.contentType);
-                await writeImage(chainId, address, s3Image.buffer, ext);
+        const inStorage = await checkImageExistsInStorage(chainId, address);
+        if (inStorage) {
+            const storedImage = await getImageFromStorage(chainId, address);
+            if (storedImage && storedImage.buffer) {
+                const ext = storedImage.extension || contentTypeToExtension(storedImage.contentType);
+                await writeImage(chainId, address, storedImage.buffer, ext);
                 return { status: "s3" };
             }
         }
     } catch (_) {
-        // ignore S3 errors and fallback to providers
+        // ignore storage errors and fallback to providers
     }
 
     // If token has a direct logoURI, try it first (handle both absolute and relative URLs)

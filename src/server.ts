@@ -3,9 +3,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { isAddress } from "viem";
-import { getImageFromS3, getMimeType } from "./services/image-s3-service";
+import { getImageFromStorage, getMimeType } from "./services/image-storage-service";
 import { SyncService, type RateLimitError } from "./services/sync-service";
-import type { TokenListProvider } from "./providers/token-list-provider";
 
 const app = new Hono();
 
@@ -237,19 +236,19 @@ app.get("/:chainId/:address", async (c) => {
 			address: c.req.param("address"),
 		});
 
-		// First, try to get image from S3
-		const s3Image = await getImageFromS3(chainId, address);
+		// First, try to get image from storage (S3 or local depending on config)
+		const storedImage = await getImageFromStorage(chainId, address);
 
-		if (s3Image) {
-			return new Response(new Uint8Array(s3Image.buffer), {
+		if (storedImage) {
+			return new Response(new Uint8Array(storedImage.buffer), {
 				headers: {
-					"Content-Type": s3Image.contentType,
+					"Content-Type": storedImage.contentType,
 					"Cache-Control": "public, max-age=86400",
 				},
 			});
 		}
 
-		// If not found in S3, return default image
+		// If not found in storage, return default image
 		const defaultImagePath = join(process.cwd(), "images", "default.png");
 		const defaultImageBuffer = await readFile(defaultImagePath);
 
