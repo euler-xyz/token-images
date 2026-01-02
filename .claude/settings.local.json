@@ -1,7 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(bun add:*)"
+      "Bash(bun add:*)",
+      "Bash(bun run build)",
+      "Bash(npx tsc:*)",
+      "Bash(bun run:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(jq:*)",
+      "Bash(curl:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)",
+      "Bash(git show:*)",
+      "Bash(timeout 5 bun run start:*)",
+      "Bash(pkill:*)",
+      "Bash(file:*)",
+      "Bash(find /Users/wojtek/Sites/euler/token-images -iname *b6168f*)"
     ],
     "deny": []
   }
