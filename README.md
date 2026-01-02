@@ -213,6 +213,26 @@ For development and migration purposes, local images follow the same pattern:
     └── image.{extension}
 ```
 
+## Adding Custom Token Logos
+
+### Pendle PT Tokens
+
+When adding a custom logo for a Pendle PT token, a teal ring (#17e3c2) is automatically applied to visually distinguish it. This happens when:
+
+1. The token is marked as `isPendlePT: true` in the tokenlist (`.data/*.json`), OR
+2. The token address is in the exceptions list
+
+**If adding a PT logo that doesn't have the teal outline built-in**, add the token address to `PENDLE_PT_EXCEPTIONS` in `src/services/pendle-pt-service.ts`:
+
+```typescript
+const PENDLE_PT_EXCEPTIONS = new Set([
+    "0xb6168f597cd37a232cb7cb94cd1786be20ead156", // cross-chain pt-cusd
+    // Add new PT addresses here (lowercase)
+]);
+```
+
+This ensures the ring effect is applied server-side when serving the image.
+
 ## Scripts
 
 - `start` - Start the HTTP server with sync endpoint and image serving
