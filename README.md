@@ -7,7 +7,7 @@ Automated token image fetching and serving for Euler Finance tokens across suppo
 - 🔄 **Smart Sync Process**: Automatically migrates local images to S3, then fetches missing images
 - 🌐 **S3 Integration**: Stores images in AWS S3 with rich metadata (provider, date, extension)
 - 🚀 **HTTP Server**: Fast image serving with fallback to default image
-- 📊 **Multiple Providers**: Extensible system supporting CoinGecko + future providers
+- 📊 **Multiple Providers**: CoinGecko, 1inch, Alchemy, Sim Dune, Pendle, Token Lists
 - 🔍 **Validation**: Zod validation for chainId (number) and address (Ethereum format)
 - 📁 **Local Migration**: Automatically uploads existing local images to S3
 - 🎯 **Efficient Bulk Operations**: Batch S3 checks and parallel processing
@@ -17,12 +17,13 @@ Automated token image fetching and serving for Euler Finance tokens across suppo
 
 - **Ethereum** (1)
 - **Base** (8453)
-- **Sonic** (1923, 146)
+- **Sonic** (146, 1923)
 - **Bob** (60808)
-- **zkSync** (80094)
+- **Berachain** (80094)
 - **Avalanche** (43114)
 - **BSC** (56)
-- **Polygon** (130)
+- **Unichain** (130)
+- **Arbitrum** (42161)
 
 ## Setup
 
@@ -37,8 +38,8 @@ EULER_API_URL=https://index-dev.euler.finance
 
 # AWS Configuration for S3 storage
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your_aws_access_key
-AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+EULER_AWS_ACCESS_KEY=your_aws_access_key
+EULER_AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 
 # Optional - Server port (default: 4000)
 PORT=4000
@@ -60,22 +61,6 @@ PORT=4000
 
 ## Usage
 
-### Manual Script Execution
-
-```bash
-# Install dependencies
-bun install
-
-# Set API key (for CoinGecko API)
-export COINGECKO_API_KEY=your_api_key_here
-
-# Fetch images from Euler Finance API
-bun run fetch-images
-
-# Fetch images from static token lists
-bun run fetch-static-images
-```
-
 ### HTTP Server
 
 Start the image serving server:
@@ -91,7 +76,8 @@ PORT=3000 bun run start
 #### API Endpoints
 
 - `GET /{chainId}/{address}` - Serve token image from S3 or default fallback
-- `POST /sync/{chainId}` - Sync token images for a specific chain
+- `GET /sync/{chainId}` - Trigger sync or get running status for a specific chain
+- `GET /sync/{chainId}/status` - Get sync status only (doesn't trigger new sync)
 - `GET /health` - Health check endpoint
 
 **Image Serving Examples:**
@@ -99,8 +85,8 @@ PORT=3000 bun run start
 - `GET /8453/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913` → serves Base USDC image from S3
 
 **Sync Examples:**
-- `POST /sync/1` → syncs all Ethereum mainnet tokens
-- `POST /sync/8453` → syncs all Base network tokens
+- `GET /sync/1` → syncs all Ethereum mainnet tokens
+- `GET /sync/8453` → syncs all Base network tokens
 
 ## 🔄 Sync Flow
 
@@ -123,7 +109,7 @@ graph LR
     B --> D[Missing Images]
 ```
 - Efficiently checks S3 bucket `euler-token-images` for existing images
-- Uses prefix matching: `{chainId}/{address}/image.*`
+- Uses exact key: `{chainId}/{address}/image` (extension stored in metadata)
 - Skips processing for tokens that already have images in S3
 
 ### Step 3: Migrate Local Images
@@ -144,16 +130,16 @@ graph LR
 ### Step 4: Download Missing Images
 ```mermaid
 graph LR
-    A[Still Missing] --> B[CoinGecko API]
+    A[Still Missing] --> B[Image Providers]
     B --> C[Download Image]
     C --> D[Upload to S3]
     D --> E[Mark as Downloaded]
     B --> F[Not Found] --> G[Mark as Failed]
 ```
 - Only after checking S3 and local images, queries external APIs
-- Currently supports CoinGecko Pro API
-- Extensible provider system for adding more APIs
-- Rate limited and batched to respect API limits
+- Provider priority: CoinGecko → 1inch → Alchemy → Sim Dune → Pendle → Token Lists
+- All providers queried in parallel; first successful result (by priority) wins
+- Rate limited to respect API limits
 - Stores rich metadata in S3
 
 ### Sync Response Format
@@ -173,7 +159,7 @@ graph LR
       {
         "address": "0x...",
         "status": "exists|migrated|downloaded|failed",
-        "provider": "local-migration|coingecko"
+        "provider": "local-migration|coingecko|1inch|alchemy|..."
       }
     ]
   }
@@ -192,13 +178,13 @@ The workflow runs daily at midnight UTC or can be triggered manually.
 euler-token-images/
 ├── 1/                          # Ethereum mainnet
 │   └── 0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48/
-│       └── image.png           # USDC image with metadata
+│       └── image               # USDC image (extension in metadata)
 ├── 8453/                       # Base network
 │   └── 0x833589fcd6edb6e08f4c7c32d4f71b54bda02913/
-│       └── image.jpg           # Base USDC image
+│       └── image               # Base USDC image
 └── {chainId}/
     └── {contractAddress}/
-        └── image.{extension}   # Auto-detected extension
+        └── image               # Extension stored in S3 metadata
 ```
 
 ### S3 Object Metadata
@@ -210,7 +196,7 @@ Each image stored in S3 includes rich metadata:
   "ContentType": "image/png",
   "Metadata": {
     "extension": "png",
-    "provider": "coingecko|local-migration",
+    "provider": "coingecko|1inch|alchemy|local-migration|...",
     "downloadDate": "2025-01-21T10:30:00.000Z",
     "originalUrl": "https://assets.coingecko.com/..." // or local path
   }
@@ -230,10 +216,7 @@ For development and migration purposes, local images follow the same pattern:
 ## Scripts
 
 - `start` - Start the HTTP server with sync endpoint and image serving
-- `fetch-images` - Legacy: Fetch token images from Euler Finance API + CoinGecko
-- `fetch-static-images` - Legacy: Process static token lists and download remote images
-
-> **Recommended**: Use the `POST /sync/{chainId}` endpoint instead of legacy scripts for better efficiency and S3 integration.
+- `migration` - Run migration script
 
 ## API Sources & Data Flow
 
@@ -242,16 +225,20 @@ graph TD
     A[Euler API] --> B[Token List]
     B --> C[S3 Check]
     C --> D[Local Check]
-    D --> E[CoinGecko API]
+    D --> E[Image Providers]
     E --> F[S3 Storage]
     F --> G[Image Serving]
 ```
 
 - **Token Data**: Euler Finance API (`https://index-dev.euler.finance/v1/tokens`)
-- **Image Sources**: 
+- **Image Sources** (in priority order):
   1. Local filesystem (migrated automatically)
-  2. CoinGecko Pro API (`https://pro-api.coingecko.com/api/v3/coins`)
-  3. Extensible provider system for future APIs
+  2. CoinGecko Pro API
+  3. 1inch Token List
+  4. Alchemy API
+  5. Sim Dune API
+  6. Pendle API
+  7. Various Token Lists
 - **Storage**: AWS S3 bucket `euler-token-images`
 - **Serving**: Direct from S3 with fallback to default image
 
@@ -262,8 +249,9 @@ graph TD
 │   HTTP Server   │    │  Sync Service   │    │  Image Providers│
 │                 │    │                 │    │                 │
 │ • Image serving │◄──►│ • S3 operations │◄──►│ • CoinGecko     │
-│ • Sync endpoint │    │ • Local migration│    │ • Extensible    │
-│ • Validation    │    │ • Batch processing│   │ • Rate limited  │
+│ • Sync endpoint │    │ • Local migration│   │ • 1inch         │
+│ • Validation    │    │ • Batch processing│  │ • Alchemy       │
+│                 │    │                 │    │ • Pendle + more │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
