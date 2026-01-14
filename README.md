@@ -8,6 +8,7 @@ Automated token image fetching and serving for Euler Finance tokens across suppo
 - 🌐 **S3 Integration**: Stores images in AWS S3 with rich metadata (provider, date, extension)
 - 🚀 **HTTP Server**: Fast image serving with fallback to default image
 - 📊 **Multiple Providers**: CoinGecko, 1inch, Alchemy, Sim Dune, Pendle, Token Lists
+- 🔗 **Pendle PT Support**: Automatically fetches yield token images for PT tokens with teal ring effect
 - 🔍 **Validation**: Zod validation for chainId (number) and address (Ethereum format)
 - 📁 **Local Migration**: Automatically uploads existing local images to S3
 - 🎯 **Efficient Bulk Operations**: Batch S3 checks and parallel processing
@@ -40,6 +41,11 @@ EULER_API_URL=https://index-dev.euler.finance
 AWS_REGION=us-east-1
 EULER_AWS_ACCESS_KEY=your_aws_access_key
 EULER_AWS_SECRET_ACCESS_KEY=your_aws_secret_key
+
+# RPC URLs for Pendle PT underlying token resolution
+RPC_HTTP_1=https://eth-mainnet.example.com
+RPC_HTTP_42161=https://arb-mainnet.example.com
+# Add RPC_HTTP_{chainId} for each chain that has PT tokens
 
 # Optional - Server port (default: 4000)
 PORT=4000
@@ -137,7 +143,8 @@ graph LR
     B --> F[Not Found] --> G[Mark as Failed]
 ```
 - Only after checking S3 and local images, queries external APIs
-- Provider priority: CoinGecko → 1inch → Alchemy → Sim Dune → Pendle → Token Lists
+- Provider priority: Local → **PT Underlying** → CoinGecko → 1inch → Alchemy → Sim Dune → Pendle → Token Lists
+- For PT tokens (with `isPendlePT: true`), fetches the underlying yield token's image automatically
 - All providers queried in parallel; first successful result (by priority) wins
 - Rate limited to respect API limits
 - Stores rich metadata in S3
@@ -213,16 +220,27 @@ For development and migration purposes, local images follow the same pattern:
     └── image.{extension}
 ```
 
-## Adding Custom Token Logos
+## Pendle PT Token Handling
 
-### Pendle PT Tokens
+For tokens marked with `isPendlePT: true` in the tokenlist (`.data/*.json`), the system automatically:
 
-When adding a custom logo for a Pendle PT token, a teal ring (#17e3c2) is automatically applied to visually distinguish it. This happens when:
+### 1. Fetches Underlying Yield Token Image
 
-1. The token is marked as `isPendlePT: true` in the tokenlist (`.data/*.json`), OR
-2. The token address is in the exceptions list
+The `PendlePTUnderlyingProvider` resolves the yield token address on-chain:
+1. Calls `SY()` on the PT contract to get the SY (Standardized Yield) address
+2. Calls `yieldToken()` on the SY contract to get the yield token address
+3. Fetches the yield token's image from other providers (CoinGecko, 1inch, etc.)
 
-**If adding a PT logo that doesn't have the teal outline built-in**, add the token address to `PENDLE_PT_EXCEPTIONS` in `src/services/pendle-pt-service.ts`:
+This requires RPC URLs configured via `RPC_HTTP_{chainId}` environment variables.
+
+### 2. Applies Teal Ring Effect
+
+When serving the image, a teal ring (#17e3c2) is automatically applied to visually distinguish PT tokens. This happens for:
+
+1. Any token marked as `isPendlePT: true` in the tokenlist, OR
+2. Token addresses in the exceptions list
+
+**For PTs not in tokenlist**, add the address to `PENDLE_PT_EXCEPTIONS` in `src/services/pendle-pt-service.ts`:
 
 ```typescript
 const PENDLE_PT_EXCEPTIONS = new Set([
@@ -231,7 +249,14 @@ const PENDLE_PT_EXCEPTIONS = new Set([
 ]);
 ```
 
-This ensures the ring effect is applied server-side when serving the image.
+### Example Flow
+
+For PT token `0x53F3373F0D811902405f91eB0d5cc3957887220D` (PT-jrUSDe):
+1. Provider detects `isPendlePT: true` in tokenlist
+2. Calls `SY()` → gets SY contract address
+3. Calls `yieldToken()` → gets `0xC58D044404d8B14e953C115E67823784dEA53d8F` (jrUSDe)
+4. Fetches jrUSDe image from providers
+5. When served, applies teal PT ring to the image
 
 ## Scripts
 
@@ -253,12 +278,13 @@ graph TD
 - **Token Data**: Euler Finance API (`https://index-dev.euler.finance/v1/tokens`)
 - **Image Sources** (in priority order):
   1. Local filesystem (migrated automatically)
-  2. CoinGecko Pro API
-  3. 1inch Token List
-  4. Alchemy API
-  5. Sim Dune API
-  6. Pendle API
-  7. Various Token Lists
+  2. Pendle PT Underlying (fetches yield token image for PT tokens)
+  3. CoinGecko Pro API
+  4. 1inch Token List
+  5. Alchemy API
+  6. Sim Dune API
+  7. Pendle API
+  8. Various Token Lists
 - **Storage**: AWS S3 bucket `euler-token-images`
 - **Serving**: Direct from S3 with fallback to default image
 

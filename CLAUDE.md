@@ -37,14 +37,27 @@ interface ImageProvider {
 
 Providers are tried in this order (see `ImageProviderManager` constructor):
 1. Local filesystem
-2. CoinGecko
-3. 1inch
-4. Alchemy
-5. Sim Dune
-6. Pendle
-7. Token Lists
+2. **Pendle PT Underlying** - for PT tokens, fetches yield token's image
+3. CoinGecko
+4. 1inch
+5. Alchemy
+6. Sim Dune
+7. Pendle
+8. Token Lists
 
 All providers execute in parallel; first successful result (by priority order) wins.
+
+### Pendle PT Token Handling
+
+For tokens marked with `isPendlePT: true` in the tokenlist (`.data/*.json`):
+
+1. **PendlePTUnderlyingProvider** (`src/providers/pendle-pt-underlying-provider.ts`):
+   - Calls `SY()` on the PT contract to get the SY address
+   - Calls `yieldToken()` on the SY contract to get the yield token address
+   - Fetches the yield token's image from other providers
+   - Requires RPC URLs configured (see Environment Variables)
+
+2. **PT Ring Effect**: When serving images, a teal ring (#17e3c2) is automatically applied to all PT tokens via `applyPendlePTRing()` in `src/services/image-processing-service.ts`.
 
 ### HTTP Endpoints (Hono)
 
@@ -66,6 +79,9 @@ Required:
 For S3 storage (optional - falls back to local storage if not set):
 - `AWS_REGION` - AWS region (default: eu-west-1)
 - `EULER_AWS_ACCESS_KEY` / `EULER_AWS_SECRET_ACCESS_KEY` - S3 credentials
+
+For Pendle PT underlying token resolution (required for PT tokens):
+- `RPC_HTTP_{chainId}` - RPC URL for each chain (e.g., `RPC_HTTP_1` for Ethereum mainnet)
 
 Optional:
 - `PORT` - Server port (default: 4000)
