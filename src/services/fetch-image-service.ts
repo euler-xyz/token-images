@@ -17,20 +17,20 @@ export class ImageProviderManager {
     private pendlePTUnderlyingProvider: PendlePTUnderlyingProvider;
 
     constructor() {
-        // Add default providers in order: Local -> CoinGecko -> 1inch -> Alchemy -> Sim Dune -> Pendle -> Token Lists
+        // Pendle PT Underlying provider - fetches logo for underlying asset of PT tokens
+        // Added first (after local) so PT tokens use their underlying asset's image
+        this.pendlePTUnderlyingProvider = new PendlePTUnderlyingProvider();
+
+        // Add default providers in order:
+        // Local -> PT Underlying -> CoinGecko -> 1inch -> Alchemy -> Sim Dune -> Pendle -> Token Lists
         this.addProvider(new LocalImagesProvider());
+        this.addProvider(this.pendlePTUnderlyingProvider);
         this.addProvider(new CoinGeckoProvider());
         this.addProvider(new OneInchProvider());
         this.addProvider(new AlchemyProvider());
         this.addProvider(new SimDuneProvider());
         this.addProvider(new PendleProvider());
-        // Added as last provider
         this.addProvider(new TokenListProvider());
-
-        // Pendle PT Underlying provider - fetches logo for underlying asset of PT tokens
-        // Added last so it only runs when all other providers fail
-        this.pendlePTUnderlyingProvider = new PendlePTUnderlyingProvider();
-        this.addProvider(this.pendlePTUnderlyingProvider);
 
         // Set up the callback for fetching underlying token images
         // This uses all providers except the PT underlying provider itself (to avoid infinite loops)

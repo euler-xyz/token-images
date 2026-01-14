@@ -5,7 +5,7 @@ import { z } from "zod";
 import { isAddress } from "viem";
 import { getImageFromStorage, getMimeType } from "./services/image-storage-service";
 import { SyncService, type RateLimitError } from "./services/sync-service";
-import { isPendlePTWithLocalOverride } from "./services/pendle-pt-service";
+import { isPendlePT } from "./services/pendle-pt-service";
 import { applyPendlePTRing } from "./services/image-processing-service";
 
 const app = new Hono();
@@ -245,9 +245,9 @@ app.get("/:chainId/:address", async (c) => {
 			let imageBuffer = storedImage.buffer;
 			let contentType = storedImage.contentType;
 
-			// Check if this is a Pendle PT token with a local override
-			// If so, apply the teal ring effect
-			const shouldApplyRing = await isPendlePTWithLocalOverride(chainId, address);
+			// Check if this is a Pendle PT token
+			// If so, apply the teal ring effect to the underlying yield token's image
+			const shouldApplyRing = await isPendlePT(chainId, address);
 
 			if (shouldApplyRing) {
 				const processed = await applyPendlePTRing(

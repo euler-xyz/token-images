@@ -18,9 +18,9 @@ const ptAbi = parseAbi([
     "function SY() external view returns (address)"
 ]);
 
-// ABI for Pendle SY contract - only the assetInfo function
+// ABI for Pendle SY contract - only the yieldToken function
 const syAbi = parseAbi([
-    "function assetInfo() external view returns (uint8 assetType, address assetAddress, uint8 assetDecimals)"
+    "function yieldToken() external view returns (address)"
 ]);
 
 // Token metadata from tokenlist
@@ -71,13 +71,13 @@ const chainIdToTokenListFile: Record<number, string> = {
 
 /**
  * PendlePTUnderlyingProvider - fetches token images for Pendle PT tokens
- * by looking up the underlying asset address from the contract.
+ * by looking up the underlying yield token address from the contract.
  *
  * This provider:
  * 1. Checks if the token is a Pendle PT (isPendlePT: true in tokenlist)
  * 2. Calls the PT contract's SY() function to get the SY address
- * 3. Calls the SY contract's assetInfo() function to get the underlying asset address
- * 4. Delegates to fetchUnderlyingImage callback to get the underlying token's image
+ * 3. Calls the SY contract's yieldToken() function to get the yield token address
+ * 4. Delegates to fetchUnderlyingImage callback to get the yield token's image
  */
 export class PendlePTUnderlyingProvider implements ImageProvider {
     name = "pendle-pt-underlying";
@@ -168,12 +168,6 @@ export class PendlePTUnderlyingProvider implements ImageProvider {
      * Check if a token is a Pendle PT by looking it up in the tokenlist
      */
     private async isPendlePT(chainId: number, address: string): Promise<boolean> {
-        // TODO: TEMPORARY DEBUG OVERRIDE - REMOVE AFTER TESTING
-        if (address.toLowerCase() === "0xB6168F597Cd37A232cb7CB94CD1786Be20eAD156".toLowerCase()) {
-            console.log(`[PendlePT] DEBUG: Forcing ${address} to be treated as PT (temporary override)`);
-            return true;
-        }
-
         const tokenlist = await this.loadTokenList(chainId);
         if (!tokenlist) {
             return false;
@@ -228,8 +222,8 @@ export class PendlePTUnderlyingProvider implements ImageProvider {
     }
 
     /**
-     * Get the underlying asset address for a Pendle PT token
-     * by calling the contract's SY() and assetInfo() functions
+     * Get the yield token address for a Pendle PT token
+     * by calling the contract's SY() and yieldToken() functions
      */
     private async getUnderlyingAssetAddress(chainId: number, ptAddress: string): Promise<string | null> {
         const chain = chainConfigs[chainId];
@@ -264,21 +258,21 @@ export class PendlePTUnderlyingProvider implements ImageProvider {
 
             console.log(`[PendlePT] SY contract: ${syAddress}`);
 
-            // Step 2: Call assetInfo() on the SY contract to get the underlying asset
-            const [assetType, assetAddress, assetDecimals] = await client.readContract({
+            // Step 2: Call yieldToken() on the SY contract to get the yield token
+            const yieldTokenAddress = await client.readContract({
                 address: syAddress as Address,
                 abi: syAbi,
-                functionName: "assetInfo",
+                functionName: "yieldToken",
             });
 
-            if (!assetAddress) {
-                console.log(`[PendlePT] assetInfo() returned null assetAddress`);
+            if (!yieldTokenAddress) {
+                console.log(`[PendlePT] yieldToken() returned null`);
                 return null;
             }
 
-            console.log(`[PendlePT] assetInfo: type=${assetType}, address=${assetAddress}, decimals=${assetDecimals}`);
+            console.log(`[PendlePT] yieldToken: ${yieldTokenAddress}`);
 
-            return assetAddress;
+            return yieldTokenAddress;
         } catch (error) {
             console.error(`[PendlePT] Contract call error for ${ptAddress}:`, error);
             return null;
