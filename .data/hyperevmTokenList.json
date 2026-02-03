@@ -7,5 +7,14 @@
     "decimals": 18,
     "logoURI": "https://assets.coingecko.com/coins/images/50882/standard/hyperliquid.jpg?1729431300",
     "meta": {}
+  },
+  {
+    "addressInfo": "0x4DE03cA1F02591B717495cfA19913aD56a2f5858",
+    "chainId": 999,
+    "name": "hwHype",
+    "symbol": "hwHYPE",
+    "decimals": 18,
+    "logoURI": "/images/999/0x4DE03cA1F02591B717495cfA19913aD56a2f5858/image.png",
+    "meta": {}
   }
 ]
