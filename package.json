@@ -5,7 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "bun run src/server.ts",
-		"migration": "bun run scripts/migration.ts"
+		"migration": "bun run scripts/migration.ts",
+		"force-update": "bun run scripts/force-update-token.ts"
 	},
 	"devDependencies": {
 		"@types/node": "^20.0.0",

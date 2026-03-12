@@ -1,4 +1,4 @@
-name: Fetch Token Images
+name: Sync Token Images
 
 on:
   schedule:
@@ -6,123 +6,60 @@ on:
   workflow_dispatch: # Allow manual triggering
 
 jobs:
-  fetch-images:
+  sync-images:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        fetch-depth: 0
-
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
-      with:
-        bun-version: latest
-
-    - name: Install dependencies
-      run: bun install
-
-    - name: Close existing PR if exists
+    - name: Trigger sync for all chains
       run: |
-        # Find existing PR for token images
-        EXISTING_PR=$(gh pr list --state open --head "update-token-images" --json number --jq '.[0].number' || echo "")
-        if [ ! -z "$EXISTING_PR" ]; then
-          echo "Closing existing PR #$EXISTING_PR"
-          gh pr close $EXISTING_PR --comment "Closing to create updated PR with latest token images"
+        BASE_URL="https://token-images.euler.finance/sync"
+
+        CHAINS=(
+          "1"       # Ethereum
+          "42161"   # Arbitrum
+          "8453"    # Base
+          "43114"   # Avalanche
+          "56"      # BSC
+          "146"     # Sonic
+          "1923"    # Sonic Blaze
+          "80094"   # Berachain
+          "60808"   # Bob
+          "130"     # Unichain
+          "59144"   # Linea
+          "5000"    # Mantle
+          "1868"    # Swell
+          "2741"    # TAC
+          "57073"   # Ink
+          "2911"    # HyperEVM
+          "10143"   # Monad
+        )
+
+        FAILED=0
+
+        for CHAIN_ID in "${CHAINS[@]}"; do
+          echo "Syncing chain ${CHAIN_ID}..."
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" "${BASE_URL}/${CHAIN_ID}")
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "  Chain ${CHAIN_ID}: OK"
+          elif [ "$HTTP_CODE" -eq 429 ]; then
+            echo "  Chain ${CHAIN_ID}: Rate limited (already syncing)"
+          else
+            echo "  Chain ${CHAIN_ID}: Failed (HTTP ${HTTP_CODE})"
+            cat /tmp/response.json
+            FAILED=$((FAILED + 1))
+          fi
+
+          # Wait 2 minutes between requests to avoid rate limits
+          sleep 120
+        done
+
+        if [ "$FAILED" -gt 0 ]; then
+          echo "::warning::${FAILED} chain(s) failed to sync"
         fi
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Create new branch
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        
-        # Create a new branch with timestamp
-        BRANCH_NAME="update-token-images-$(date +%Y%m%d-%H%M%S)"
-        git checkout -b $BRANCH_NAME
-        echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-
-    - name: Fetch token images
-      run: |
-        # Run the fetch script - it will automatically fetch tokens from Euler Finance API
-        bun run src/fetch-images.ts
-      env:
-        COINGECKO_API_KEY: ${{ secrets.COINGECKO_API_KEY }}
-
-    - name: Check for changes
-      id: check_changes
-      run: |
-        git add .
-        if git diff --cached --quiet; then
-          echo "No changes to commit"
-          echo "has_changes=false" >> $GITHUB_OUTPUT
-        else
-          echo "Changes detected"
-          echo "has_changes=true" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Commit and push changes
-      if: steps.check_changes.outputs.has_changes == 'true'
-      run: |
-        git commit -m "Update token images from CoinGecko API
-        
-        - Fetched latest token images
-        - Updated folder structure: chain/address/image.png
-        - Generated on $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-        
-        git push origin $BRANCH_NAME
-
-    - name: Create Pull Request
-      if: steps.check_changes.outputs.has_changes == 'true'
-      run: |
-        gh pr create \
-          --title "Update token images from Euler Finance tokens" \
-          --body "This PR updates token images for all tokens from the Euler Finance API.
-        
-        ## Changes
-        - Fetched tokens from Euler Finance API for all supported chains
-        - Downloaded images from CoinGecko Pro API
-        - Updated folder structure following pattern: \`chain/address/image.png\`
-        - Generated automatically on $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-        
-        ## Supported Chains
-        - Ethereum (1)
-        - Base (8453)
-        - Sonic (1923, 146)
-        - Bob (60808)
-        - zkSync (80094)
-        - Avalanche (43114)
-        - BSC (56)
-        - Polygon (130)
-        
-        ## Files Updated
-        $(git diff --name-only HEAD~1 HEAD | sed 's/^/- /')
-        
-        ---
-        *This PR was created automatically by the GitHub Actions workflow.*" \
-          --head $BRANCH_NAME \
-          --base main
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Output summary
-      if: steps.check_changes.outputs.has_changes == 'true'
+      if: always()
       run: |
-        echo "## Summary" >> $GITHUB_STEP_SUMMARY
-        echo "✅ Successfully fetched and updated token images from Euler Finance API" >> $GITHUB_STEP_SUMMARY
-        echo "📁 Images saved to chain/address/image.png structure" >> $GITHUB_STEP_SUMMARY
-        echo "🔗 Supported chains: Ethereum, Base, Sonic, Bob, zkSync, Avalanche, BSC, Polygon" >> $GITHUB_STEP_SUMMARY
-        echo "🔄 Created PR with branch: $BRANCH_NAME" >> $GITHUB_STEP_SUMMARY
-        
-        echo "## Files Updated" >> $GITHUB_STEP_SUMMARY
-        git diff --name-only HEAD~1 HEAD | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
-
-    - name: No changes summary
-      if: steps.check_changes.outputs.has_changes == 'false'
-      run: |
-        echo "## Summary" >> $GITHUB_STEP_SUMMARY
-        echo "ℹ️ No new token images to update" >> $GITHUB_STEP_SUMMARY
-        echo "All token images are already up to date" >> $GITHUB_STEP_SUMMARY
+        echo "## Sync Token Images" >> $GITHUB_STEP_SUMMARY
+        echo "Triggered sync for all supported chains via https://token-images.euler.finance" >> $GITHUB_STEP_SUMMARY
