@@ -20,5 +20,8 @@
 		"sharp": "^0.34.5",
 		"viem": "^2.37.7",
 		"zod": "^4.1.11"
+	},
+	"optionalDependencies": {
+		"@img/sharp-darwin-arm64": "^0.34.5"
 	}
 }

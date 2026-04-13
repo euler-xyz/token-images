@@ -12,10 +12,11 @@ const app = new Hono();
 
 // Validation schema
 const paramsSchema = z.object({
-	chainId: z.string().transform((val) => {
+	chainId: z.string().transform((val, ctx) => {
 		const num = Number(val);
 		if (isNaN(num) || !Number.isInteger(num) || num < 0) {
-			throw new Error("chainId must be a valid positive integer value: " + val || "undefined");
+			ctx.addIssue({ code: z.ZodIssueCode.custom, message: "chainId must be a valid positive integer value: " + val });
+			return z.NEVER;
 		}
 		return num;
 	}),
@@ -26,10 +27,11 @@ const paramsSchema = z.object({
 
 // Validation schema for sync endpoint
 const syncParamsSchema = z.object({
-	chainId: z.string().transform((val) => {
+	chainId: z.string().transform((val, ctx) => {
 		const num = Number(val);
 		if (isNaN(num) || !Number.isInteger(num) || num < 0) {
-			throw new Error("chainId must be a valid positive integer value: " + val || "undefined");
+			ctx.addIssue({ code: z.ZodIssueCode.custom, message: "chainId must be a valid positive integer value: " + val });
+			return z.NEVER;
 		}
 		return num;
 	}),
@@ -38,11 +40,12 @@ const syncParamsSchema = z.object({
 // Validation schema for symbol search endpoint
 const symbolSearchSchema = z.object({
 	symbol: z.string().min(1, "symbol is required"),
-	chainId: z.string().optional().transform((val) => {
+	chainId: z.string().optional().transform((val, ctx) => {
 		if (!val) return undefined;
 		const num = Number(val);
 		if (isNaN(num) || !Number.isInteger(num) || num < 0) {
-			throw new Error("chainId must be a valid positive integer value: " + val);
+			ctx.addIssue({ code: z.ZodIssueCode.custom, message: "chainId must be a valid positive integer value: " + val });
+			return z.NEVER;
 		}
 		return num;
 	}),
