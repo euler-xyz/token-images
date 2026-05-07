@@ -31,7 +31,7 @@ jobs:
           "2741"    # TAC
           "57073"   # Ink
           "2911"    # HyperEVM
-          "10143"   # Monad
+          "143"     # Monad
         )
 
         FAILED=0
