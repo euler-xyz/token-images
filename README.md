@@ -288,7 +288,7 @@ Keeps token images up to date by triggering the sync endpoint on the production 
 
 1. Loops through all 17 supported chain IDs
 2. Sends `GET https://token-images.euler.finance/sync/{chainId}` for each chain
-3. Waits 2 minutes between requests to respect the rate limit
+3. Waits 1 minute between chain requests to respect the sync rate limit
 4. Logs the result per chain:
    - `200` — sync triggered successfully
    - `429` — rate limited or already syncing (non-fatal, skipped)
