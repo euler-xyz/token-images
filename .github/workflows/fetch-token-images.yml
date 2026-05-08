@@ -36,7 +36,8 @@ jobs:
 
         FAILED=0
 
-        for CHAIN_ID in "${CHAINS[@]}"; do
+        for INDEX in "${!CHAINS[@]}"; do
+          CHAIN_ID="${CHAINS[$INDEX]}"
           echo "Syncing chain ${CHAIN_ID}..."
           HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" "${BASE_URL}/${CHAIN_ID}")
 
@@ -50,8 +51,10 @@ jobs:
             FAILED=$((FAILED + 1))
           fi
 
-          # Wait 2 minutes between requests to avoid rate limits
-          sleep 120
+          if [ "$INDEX" -lt $((${#CHAINS[@]} - 1)) ]; then
+            # Wait 1 minute between chain triggers to avoid rate limits
+            sleep 60
+          fi
         done
 
         if [ "$FAILED" -gt 0 ]; then
