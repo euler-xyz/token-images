@@ -1,0 +1,5 @@
+[install]
+# Refuse installs that would mutate bun.lockb. Override with --no-frozen-lockfile locally if needed.
+frozenLockfile = true
+# Save new deps at exact versions.
+exact = true
