@@ -273,7 +273,7 @@ const PENDLE_PT_EXCEPTIONS = new Set([
 | Swell | 1868 |
 | TAC | 2741 |
 | Ink | 57073 |
-| HyperEVM | 2911 |
+| HyperEVM | 2911, 999 |
 | Monad | 143 |
 
 ## CI/CD
@@ -286,7 +286,7 @@ Keeps token images up to date by triggering the sync endpoint on the production 
 
 **How it works:**
 
-1. Loops through all 17 supported chain IDs
+1. Loops through all 18 supported chain IDs
 2. Sends `GET https://token-images.euler.finance/sync/{chainId}` for each chain
 3. Waits 1 minute between chain requests to respect the sync rate limit
 4. Logs the result per chain:
