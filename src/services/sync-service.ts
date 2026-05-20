@@ -8,6 +8,15 @@ export interface TokenInfo {
     decimals: number;
 }
 
+interface TokenListResponse {
+    data?: unknown;
+    meta?: {
+        total?: number;
+        offset?: number;
+        limit?: number;
+    };
+}
+
 export interface SyncResult {
     chainId: number;
     totalTokens: number;
@@ -50,10 +59,11 @@ export class SyncService {
     private eulerApiUrl: string;
     private syncStatuses: Map<number, SyncStatus> = new Map();
     private readonly RATE_LIMIT_MINUTES = 1;
+    private readonly TOKEN_PAGE_LIMIT = 500;
 
     constructor() {
         this.imageProviders = new ImageProviderManager();
-        this.eulerApiUrl = process.env.EULER_API_URL || "https://index-dev.euler.finance";
+        this.eulerApiUrl = process.env.EULER_API_URL || "https://v3.euler.finance/v3";
 
         console.log(`Using Euler API URL: ${this.eulerApiUrl}`);
     }
@@ -230,7 +240,7 @@ export class SyncService {
                 progress: { phase: 'fetching tokens', current: 0, total: 1 }
             });
 
-            console.log(`Fetching tokens from ${this.eulerApiUrl}/v1/tokens?chainId=${chainId}`);
+            console.log(`Fetching tokens from ${this.eulerApiUrl} for chain ${chainId}`);
             const tokens = await this.fetchTokensFromEuler(chainId);
             console.log(`Fetched ${tokens.length} tokens for chain ${chainId}`);
 
@@ -400,19 +410,101 @@ export class SyncService {
 
     private async fetchTokensFromEuler(chainId: number): Promise<TokenInfo[]> {
         try {
-            const response = await fetch(`${this.eulerApiUrl}/v1/tokens?chainId=${chainId}`);
+            const firstPage = await this.fetchTokenPage(chainId, 0);
 
-            if (!response.ok) {
-                console.error(`Failed to fetch tokens for chain ${chainId}: ${response.status}`);
-                return [];
+            if (Array.isArray(firstPage)) {
+                return this.normalizeTokens(firstPage);
             }
 
-            const tokens: TokenInfo[] = await response.json();
-            return tokens;
+            const firstTokens = this.normalizeTokens(firstPage.data);
+            const total = firstPage.meta?.total ?? firstTokens.length;
+            const pageLimit = firstPage.meta?.limit ?? firstTokens.length;
+
+            if (firstTokens.length >= total || pageLimit <= 0) {
+                return firstTokens;
+            }
+
+            const allTokens = [...firstTokens];
+            let offset = (firstPage.meta?.offset ?? 0) + pageLimit;
+
+            while (allTokens.length < total && offset < total) {
+                const page = await this.fetchTokenPage(chainId, offset);
+
+                if (Array.isArray(page)) {
+                    allTokens.push(...this.normalizeTokens(page));
+                    break;
+                }
+
+                const pageTokens = this.normalizeTokens(page.data);
+                if (pageTokens.length === 0) {
+                    break;
+                }
+
+                allTokens.push(...pageTokens);
+                offset = (page.meta?.offset ?? offset) + (page.meta?.limit ?? pageTokens.length);
+            }
+
+            return allTokens;
         } catch (error) {
             console.error(`Error fetching tokens for chain ${chainId}:`, error);
             return [];
         }
+    }
+
+    private async fetchTokenPage(chainId: number, offset: number): Promise<TokenListResponse | unknown[]> {
+        const url = this.buildTokensUrl(chainId, offset);
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            console.error(`Failed to fetch tokens for chain ${chainId}: ${response.status}`);
+            return [];
+        }
+
+        return response.json();
+    }
+
+    private buildTokensUrl(chainId: number, offset: number): string {
+        const url = new URL(this.eulerApiUrl);
+        const basePath = url.pathname.replace(/\/$/, "");
+        const isV3Api = url.hostname === "v3.euler.finance" || basePath.endsWith("/v3");
+
+        url.search = "";
+
+        if (isV3Api) {
+            url.pathname = basePath.endsWith("/v3") ? `${basePath}/tokens` : "/v3/tokens";
+            url.searchParams.set("chainId", chainId.toString());
+            url.searchParams.set("limit", this.TOKEN_PAGE_LIMIT.toString());
+            url.searchParams.set("offset", offset.toString());
+            return url.toString();
+        }
+
+        url.pathname = `${basePath}/v1/tokens`;
+        url.searchParams.set("chainId", chainId.toString());
+        return url.toString();
+    }
+
+    private normalizeTokens(tokens: unknown): TokenInfo[] {
+        if (!Array.isArray(tokens)) {
+            return [];
+        }
+
+        return tokens.flatMap((token) => {
+            if (!token || typeof token !== "object" || !("address" in token)) {
+                return [];
+            }
+
+            const rawToken = token as Record<string, unknown>;
+            if (typeof rawToken.address !== "string") {
+                return [];
+            }
+
+            return [{
+                address: rawToken.address,
+                symbol: typeof rawToken.symbol === "string" ? rawToken.symbol : "",
+                name: typeof rawToken.name === "string" ? rawToken.name : "",
+                decimals: typeof rawToken.decimals === "number" ? rawToken.decimals : 18,
+            }];
+        });
     }
 
     private async migrateLocalImages(
