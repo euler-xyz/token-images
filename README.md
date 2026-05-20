@@ -74,7 +74,7 @@ Copy `.env.example` to `.env` and fill in the values:
 ```bash
 # Required
 COINGECKO_API_KEY=           # CoinGecko Pro API key
-EULER_API_URL=               # Euler Finance API (default: https://index-dev.euler.finance)
+EULER_API_URL=               # Euler Finance API (default: https://v3.euler.finance/v3)
 
 # S3 storage (optional - falls back to local-storage/ if not set)
 AWS_REGION=                  # AWS region (default: eu-west-1)

@@ -61,7 +61,7 @@ Images stored at: `euler-token-images/{chainId}/{address}/image` (no extension i
 
 Required:
 - `COINGECKO_API_KEY` - CoinGecko Pro API key
-- `EULER_API_URL` - Euler Finance API (default: https://index-dev.euler.finance)
+- `EULER_API_URL` - Euler Finance API (default: https://v3.euler.finance/v3)
 
 For S3 storage (optional - falls back to local storage if not set):
 - `AWS_REGION` - AWS region (default: eu-west-1)
