@@ -273,7 +273,7 @@ const PENDLE_PT_EXCEPTIONS = new Set([
 | Swell | 1868 |
 | TAC | 2741 |
 | Ink | 57073 |
-| HyperEVM | 2911 |
+| HyperEVM | 999 |
 | Monad | 143 |
 
 ## CI/CD

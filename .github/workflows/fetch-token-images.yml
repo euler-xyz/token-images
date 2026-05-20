@@ -30,7 +30,7 @@ jobs:
           "1868"    # Swell
           "2741"    # TAC
           "57073"   # Ink
-          "2911"    # HyperEVM
+          "999"     # HyperEVM
           "143"     # Monad
         )
 

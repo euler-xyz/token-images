@@ -36,7 +36,7 @@ const CHAIN_ID_TO_TOKENLIST: Record<number, string> = {
     130: "unichainTokenList.json",
     2741: "tacTokenList.json",
     57073: "inkTokenList.json",
-    2911: "hyperevmTokenList.json",
+    999: "hyperevmTokenList.json",
     10143: "monadTokenList.json",
 };
 
