@@ -1,22 +1,28 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readdir, readFile } from "node:fs/promises";
+import { extname, join } from "node:path";
 
-const SAFE_LABEL_FILENAME = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
+const SAFE_LABEL_NAME = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/;
 const LABEL_IMAGE_DIRECTORY = join(process.cwd(), "images", "labels");
+const SUPPORTED_EXTENSIONS = new Set([".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"]);
+
+let labelImageIndex: Promise<Map<string, string>> | undefined;
 
 export type LabelImage = {
 	buffer: Uint8Array;
 	contentType: string;
 };
 
-export function isSafeLabelFilename(filename: string): boolean {
-	return filename.length <= 255 && filename !== "." && filename !== ".." && SAFE_LABEL_FILENAME.test(filename);
+export function isSafeLabelName(name: string): boolean {
+	return name.length <= 255 && name !== "." && name !== ".." && SAFE_LABEL_NAME.test(name);
 }
 
-export async function getLabelImage(filename: string): Promise<LabelImage | null> {
-	if (!isSafeLabelFilename(filename)) {
-		throw new TypeError("Invalid label image filename");
+export async function getLabelImage(name: string): Promise<LabelImage | null> {
+	if (!isSafeLabelName(name)) {
+		throw new TypeError("Invalid label image name");
 	}
+
+	const filename = (await getLabelImageIndex()).get(name);
+	if (!filename) return null;
 
 	try {
 		const buffer = new Uint8Array(await readFile(join(LABEL_IMAGE_DIRECTORY, filename)));
@@ -28,6 +34,26 @@ export async function getLabelImage(filename: string): Promise<LabelImage | null
 		if (isMissingFileError(error)) return null;
 		throw error;
 	}
+}
+
+async function getLabelImageIndex(): Promise<Map<string, string>> {
+	labelImageIndex ??= buildLabelImageIndex();
+	return labelImageIndex;
+}
+
+async function buildLabelImageIndex(): Promise<Map<string, string>> {
+	const index = new Map<string, string>();
+	for (const filename of await readdir(LABEL_IMAGE_DIRECTORY)) {
+		const extension = extname(filename).toLowerCase();
+		if (!SUPPORTED_EXTENSIONS.has(extension)) continue;
+
+		const name = filename.slice(0, -extension.length);
+		if (index.has(name)) {
+			throw new Error(`Label assets have duplicate name ${JSON.stringify(name)}`);
+		}
+		index.set(name, filename);
+	}
+	return index;
 }
 
 function detectImageContentType(buffer: Uint8Array): string {

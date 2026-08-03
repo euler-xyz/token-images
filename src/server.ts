@@ -7,7 +7,7 @@ import { getImageFromStorage, getMimeType } from "./services/image-storage-servi
 import { SyncService, type RateLimitError } from "./services/sync-service";
 import { isPendlePTWithLocalOverride } from "./services/pendle-pt-service";
 import { applyPendlePTRing } from "./services/image-processing-service";
-import { getLabelImage, isSafeLabelFilename } from "./services/label-image-service";
+import { getLabelImage, isSafeLabelName } from "./services/label-image-service";
 
 export const app = new Hono();
 
@@ -234,14 +234,14 @@ app.get("/sync/:chainId/status", async (c) => {
 // });
 
 // Route to serve label images
-app.get("/labels/:filename", async (c) => {
-	const filename = c.req.param("filename");
-	if (!isSafeLabelFilename(filename)) {
-		return c.json({ error: "Invalid label image filename" }, 400);
+app.get("/labels/:name", async (c) => {
+	const name = c.req.param("name");
+	if (!isSafeLabelName(name)) {
+		return c.json({ error: "Invalid label image name" }, 400);
 	}
 
 	try {
-		const image = await getLabelImage(filename);
+		const image = await getLabelImage(name);
 		if (!image) {
 			return c.json({ error: "Label image not found" }, 404);
 		}
@@ -255,7 +255,7 @@ app.get("/labels/:filename", async (c) => {
 			},
 		});
 	} catch (error) {
-		console.error(`Error serving label image ${filename}:`, error);
+		console.error(`Error serving label image ${name}:`, error);
 		return c.json({ error: "Internal server error" }, 500);
 	}
 });
