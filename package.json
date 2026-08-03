@@ -5,6 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"start": "bun run src/server.ts",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit",
 		"migration": "bun run scripts/migration.ts",
 		"force-update": "bun run scripts/force-update-token.ts"
 	},

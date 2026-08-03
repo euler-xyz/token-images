@@ -42,6 +42,7 @@ euler-token-images/
 │   └── force-update-token.ts           # Force-update a single token image in storage
 ├── images/                             # Local source images (committed to repo)
 │   ├── default.png                     # Fallback image when no logo is found
+│   ├── labels/{name}.{ext}             # Entity, product, and campaign logos
 │   └── {chainId}/{address}/image.{ext} # Per-token images
 ├── .data/                              # Token list JSON files per chain
 │   ├── ethereumTokenList.json
@@ -123,6 +124,7 @@ PORT=3000 bun run start  # custom port
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/{chainId}/{address}` | Serve token image (falls back to `default.png`) |
+| `GET` | `/labels/{name}` | Serve a label image (returns `404` when absent) |
 | `GET` | `/sync/{chainId}` | Trigger sync for a chain (or return running status) |
 | `GET` | `/sync/{chainId}/status` | Get sync status without triggering |
 | `GET` | `/health` | Health check |
@@ -138,6 +140,18 @@ GET /8453/0x833589fcd6edb6e08f4c7c32d4f71b54bda02913  → USDC on Base
 - Falls back to `images/default.png` if not found
 - Cached with `Cache-Control: public, max-age=86400` (24 hours)
 - Pendle PT tokens with local overrides automatically get a teal ring applied
+
+### Label Images
+
+```
+GET /labels/euler       → Euler entity logo
+GET /labels/turtle      → Turtle campaign logo
+```
+
+Label images are committed under `images/labels/` and served by their safe name
+without a file-extension suffix. The endpoint returns the image's detected
+`Content-Type`, caches successful responses for 24 hours, and returns `404`
+without a fallback when a name is absent.
 
 ### Sync
 
@@ -235,6 +249,14 @@ To add or replace a token logo manually:
 2. Run `bun run force-update -- --chainId <chainId> --address <address>` to push it to S3
 
 Or simply commit the image to the repo - it will be picked up on the next sync as the local provider has the highest priority.
+
+## Adding Label Images
+
+Place entity, product, and campaign logos in `images/labels/`. The filename
+without its extension becomes the public label name. Names may contain letters,
+numbers, `.`, `_`, and `-`, must begin and end with a letter or number, and must
+be no longer than 255 characters. PNG, JPEG, GIF, WebP, and SVG image contents
+are supported. Each name must be unique across file types.
 
 ## Pendle PT Tokens
 
