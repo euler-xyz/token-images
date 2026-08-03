@@ -246,11 +246,11 @@ app.get("/labels/:name", async (c) => {
 			return c.json({ error: "Label image not found" }, 404);
 		}
 
-		return new Response(image.buffer, {
+		return new Response(new Uint8Array(image.buffer), {
 			headers: {
 				"Content-Type": image.contentType,
 				"Cache-Control": "public, max-age=86400",
-				"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+				"Content-Security-Policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
 				"X-Content-Type-Options": "nosniff",
 			},
 		});

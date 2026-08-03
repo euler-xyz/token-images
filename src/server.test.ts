@@ -8,7 +8,9 @@ describe("label images", () => {
 		expect(response.status).toBe(200);
 		expect(response.headers.get("content-type")).toBe("image/svg+xml");
 		expect(response.headers.get("cache-control")).toBe("public, max-age=86400");
-		expect(response.headers.get("content-security-policy")).toContain("sandbox");
+		expect(response.headers.get("content-security-policy")).toBe(
+			"default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox",
+		);
 		expect(response.headers.get("x-content-type-options")).toBe("nosniff");
 		expect(await response.text()).toContain("<svg");
 	});
