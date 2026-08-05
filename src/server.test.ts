@@ -22,6 +22,18 @@ describe("label images", () => {
 		expect(response.headers.get("content-type")).toBe("image/png");
 	});
 
+	test.each([
+		["lbgt", "image/svg+xml"],
+		["relend", "image/png"],
+		["sonic", "image/png"],
+		["spice", "image/svg+xml"],
+	])("serves archived-chain label %s", async (name, contentType) => {
+		const response = await app.request(`http://localhost/labels/${name}`);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("content-type")).toBe(contentType);
+	});
+
 	test("returns 404 without the token-image fallback", async () => {
 		const response = await app.request("http://localhost/labels/missing");
 
