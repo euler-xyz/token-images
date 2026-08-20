@@ -1,0 +1,322 @@
+name: Build, Push & Deploy (prod)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Existing ECR image tag to redeploy (leave empty to build from this ref)'
+        required: false
+        default: ''
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  TERRAFORM_REPO: euler-xyz/euler-terraform
+  TERRASPACE_STACK: token_images_fargate
+  AWS_REGION: eu-west-1
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-push:
+    name: Build & Push Image
+    # Never run in forks: this repository is public and the job needs environment secrets.
+    if: github.repository == 'euler-xyz/token-images' && (github.event_name == 'push' || inputs.image_tag == '')
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.generate-tag.outputs.image_tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Generate image tag
+        id: generate-tag
+        run: |
+          TIMESTAMP=$(date -u +'%H%M_%d%m%Y')
+          SHORT_SHA=$(git rev-parse --short=12 HEAD)
+          IMAGE_TAG="prod_${TIMESTAMP}_${SHORT_SHA}"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Generated image tag: ${IMAGE_TAG}"
+
+      - name: Configure AWS credentials (ECR)
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PUSH_IMAGE_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Build and push docker image to Amazon ECR
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          # sharp ships per-platform binaries and the task definition pins X86_64.
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ${{ secrets.ECR_REGISTRY_PROD }}/${{ secrets.ECR_REPOSITORY_PROD }}:${{ steps.generate-tag.outputs.image_tag }}
+          cache-from: type=gha,scope=token-images-prod
+          cache-to: type=gha,mode=max,scope=token-images-prod
+
+  deploy:
+    name: Deploy to ECS
+    if: always() && github.repository == 'euler-xyz/token-images' && (needs.build-push.result == 'success' || (needs.build-push.result == 'skipped' && inputs.image_tag != ''))
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Resolve image tag
+        id: resolve-tag
+        env:
+          INPUT_TAG: ${{ inputs.image_tag }}
+          BUILD_TAG: ${{ needs.build-push.outputs.image_tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$BUILD_TAG"
+          fi
+          if ! echo "$TAG" | grep -qE '^[a-zA-Z0-9_.-]+$'; then
+            echo "::error::Invalid image tag: must match [a-zA-Z0-9_.-]+"
+            exit 1
+          fi
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Notify Slack deployment started
+        env:
+          IMAGE_TAG: ${{ steps.resolve-tag.outputs.image_tag }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_PROD }}
+        run: |
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "SLACK_WEBHOOK_URL is not configured; skipping Slack notification."
+            exit 0
+          fi
+
+          TEXT=$(printf '%s\n' \
+            ":rocket: *token-images prod deploy started*" \
+            "*Image tag:* ${IMAGE_TAG}" \
+            "*Commit:* <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|${GITHUB_SHA}>" \
+            "*Workflow run:* <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|${GITHUB_WORKFLOW} #${GITHUB_RUN_NUMBER}>")
+
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -fsS --max-time 10 --retry 2 --retry-delay 2 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack notification failed"
+
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1
+        with:
+          app-id: ${{ secrets.EULER_TERRAFORM_APP_ID }}
+          private-key: ${{ secrets.EULER_TERRAFORM_APP_PRIVATE_KEY }}
+          repositories: euler-terraform
+
+      - name: Check out Terraform repo
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: ${{ env.TERRAFORM_REPO }}
+          token: ${{ steps.app-token.outputs.token }}
+          ref: master
+
+      - name: Configure AWS credentials (ECR)
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PUSH_IMAGE_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@f2e9fc6c2b355c1890b65e6f6f0e2ac3e6e22f78 # v2.1.2
+
+      - name: Cache terraspace-runner image
+        id: cache-runner-image
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: /tmp/terraspace-runner.tar
+          key: terraspace-runner-${{ hashFiles('Dockerfile') }}
+          restore-keys: terraspace-runner-
+
+      - name: Load or pull terraspace-runner image
+        env:
+          RUNNER_IMAGE: ${{ secrets.TERRASPACE_IMAGE }}
+        run: |
+          if [ -f /tmp/terraspace-runner.tar ]; then
+            docker load -i /tmp/terraspace-runner.tar
+          else
+            docker pull "$RUNNER_IMAGE"
+            docker save "$RUNNER_IMAGE" -o /tmp/terraspace-runner.tar
+          fi
+
+      - name: Configure AWS credentials (deploy)
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Cache Terraform providers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.terraform.d/plugin-cache
+          key: terraform-providers-${{ hashFiles('**/.terraform.lock.hcl') }}
+          restore-keys: terraform-providers-
+
+      - name: Terraspace deploy
+        env:
+          TS_ENV: prod
+          IMAGE_TAG: ${{ steps.resolve-tag.outputs.image_tag }}
+          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY_PROD }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_PROD }}
+          RUNNER_IMAGE: ${{ secrets.TERRASPACE_IMAGE }}
+        run: |
+          mkdir -p ~/.terraform.d/plugin-cache
+          FULL_IMAGE="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker run --rm \
+            -e TS_ENV \
+            -e AWS_REGION \
+            -e AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY \
+            -e AWS_SESSION_TOKEN \
+            -e TF_PLUGIN_CACHE_DIR=/tf-plugin-cache \
+            -v "${{ github.workspace }}:/work" \
+            -v "$HOME/.terraform.d/plugin-cache:/tf-plugin-cache" \
+            "$RUNNER_IMAGE" \
+            bundle exec terraspace up "${{ env.TERRASPACE_STACK }}" -y \
+              --var "docker_image_link=${FULL_IMAGE}"
+
+      - name: Wait for ECS service stability and stream events
+        env:
+          ECS_CLUSTER: ${{ secrets.ECS_CLUSTER_PROD }}
+          ECS_SERVICE: ${{ secrets.ECS_SERVICE_PROD }}
+        run: |
+          set -euo pipefail
+
+          echo "Waiting for ECS service stability..."
+          timeout_seconds=900
+          poll_interval_seconds=15
+          deadline=$((SECONDS + timeout_seconds))
+
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            echo ""
+            echo "Recent ECS service events:"
+            aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query "services[0].events[:5]" \
+              --output table || echo "WARNING: failed to fetch ECS service events"
+
+            primary_rollout_state=$(aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query "services[0].deployments[?status==\`PRIMARY\`].rolloutState | [0]" \
+              --output text)
+
+            primary_rollout_reason=$(aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --query "services[0].deployments[?status==\`PRIMARY\`].rolloutStateReason | [0]" \
+              --output text)
+
+            if [ "$primary_rollout_state" = "COMPLETED" ]; then
+              echo "ECS rollout completed."
+              exit 0
+            fi
+
+            if [ "$primary_rollout_state" = "FAILED" ]; then
+              echo "ECS rollout failed: $primary_rollout_reason"
+              exit 1
+            fi
+
+            if [ "$primary_rollout_state" = "None" ]; then
+              echo "No PRIMARY deployment reported yet for $ECS_SERVICE on $ECS_CLUSTER (service may still be starting up)."
+            else
+              echo "Current rollout state: $primary_rollout_state"
+            fi
+            # Plain if, not `[ ... ] && echo`: under `set -e` a false test in an
+            # AND-list terminates the step, and a null reason prints as "None".
+            if [ "$primary_rollout_reason" != "None" ]; then
+              echo "Reason: $primary_rollout_reason"
+            fi
+            sleep "$poll_interval_seconds"
+          done
+
+          echo "Timed out waiting for ECS service stability after ${timeout_seconds}s."
+          exit 1
+
+      - name: Notify Slack deployment finished
+        if: always()
+        env:
+          IMAGE_TAG: ${{ steps.resolve-tag.outputs.image_tag }}
+          JOB_STATUS: ${{ job.status }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_PROD }}
+        run: |
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "SLACK_WEBHOOK_URL is not configured; skipping Slack notification."
+            exit 0
+          fi
+
+          STATUS_EMOJI=":white_check_mark:"
+          STATUS_TEXT="completed"
+
+          if [ "${JOB_STATUS}" != "success" ]; then
+            STATUS_EMOJI=":x:"
+            STATUS_TEXT="failed"
+            if [ "${JOB_STATUS}" = "cancelled" ]; then
+              STATUS_TEXT="cancelled"
+            fi
+          fi
+
+          TEXT=$(printf '%s\n' \
+            "${STATUS_EMOJI} *token-images prod deploy ${STATUS_TEXT}*" \
+            "*Image tag:* ${IMAGE_TAG:-unknown}" \
+            "*Commit:* <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|${GITHUB_SHA}>" \
+            "*Workflow run:* <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|${GITHUB_WORKFLOW} #${GITHUB_RUN_NUMBER}>")
+
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -fsS --max-time 10 --retry 2 --retry-delay 2 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack notification failed"
+
+  notify-build-push-failed:
+    name: Notify Slack Build/Push Failed
+    if: always() && needs.build-push.result != 'success' && needs.build-push.result != 'skipped'
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: production
+    permissions: {}
+    steps:
+      - name: Notify Slack build/push failed
+        env:
+          BUILD_RESULT: ${{ needs.build-push.result }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_PROD }}
+        run: |
+          if [ -z "${SLACK_WEBHOOK_URL}" ]; then
+            echo "SLACK_WEBHOOK_URL is not configured; skipping Slack notification."
+            exit 0
+          fi
+
+          STATUS_TEXT="failed"
+          if [ "${BUILD_RESULT}" = "cancelled" ]; then
+            STATUS_TEXT="cancelled"
+          fi
+
+          TEXT=$(printf '%s\n' \
+            ":x: *token-images prod deploy ${STATUS_TEXT}*" \
+            "*Image tag:* not generated" \
+            "*Status:* build/push did not complete; deploy was not started" \
+            "*Commit:* <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}|${GITHUB_SHA}>" \
+            "*Workflow run:* <${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}|${GITHUB_WORKFLOW} #${GITHUB_RUN_NUMBER}>")
+
+          jq -n --arg text "$TEXT" '{text: $text}' \
+            | curl -fsS --max-time 10 --retry 2 --retry-delay 2 -X POST -H 'Content-type: application/json' --data @- "$SLACK_WEBHOOK_URL" \
+            || echo "::warning::Slack notification failed"
