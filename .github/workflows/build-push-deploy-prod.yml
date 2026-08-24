@@ -129,7 +129,7 @@ jobs:
         with:
           repository: ${{ env.TERRAFORM_REPO }}
           token: ${{ steps.app-token.outputs.token }}
-          ref: feature/token_images_fargate
+          ref: master
 
       - name: Configure AWS credentials (ECR)
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
