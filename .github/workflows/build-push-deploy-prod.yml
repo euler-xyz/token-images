@@ -2,7 +2,7 @@ name: Build, Push & Deploy (prod)
 
 on:
   push:
-    branches: [feature/gh_actions]
+    branches: [main]
   workflow_dispatch:
     inputs:
       image_tag:
