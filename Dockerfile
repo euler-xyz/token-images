@@ -1,10 +1,5 @@
 # syntax=docker/dockerfile:1
 
-# ── Doppler CLI stage ──
-# Same pattern as euler-lite: the CLI is baked into the image and injects the
-# secrets at runtime from DOPPLER_TOKEN / DOPPLER_PROJECT / DOPPLER_CONFIG, which
-# ECS supplies as `secrets` from SSM Parameter Store. Terraform never talks to
-# Doppler, so no Doppler token is needed in CI.
 FROM --platform=$BUILDPLATFORM debian:bookworm-slim AS doppler
 
 ARG TARGETARCH
@@ -33,21 +28,10 @@ RUN set -eux; \
   tar --extract --gzip --file /tmp/doppler.tar.gz --directory /usr/local/bin doppler; \
   chmod 0755 /usr/local/bin/doppler
 
-# ── Dependency stage ──
-# token-images runs on Bun and executes TypeScript directly, so there is no
-# build/transpile step - only dependency installation.
-#
-# sharp ships per-platform native binaries and the ECS task definition pins
-# cpu_architecture = X86_64, so this image must be built for linux/amd64
-# (the CI build passes --platform linux/amd64).
 FROM oven/bun:1-slim AS deps
 
 WORKDIR /app
 
-# bun.lockb is intentionally installed without --frozen-lockfile: the lockfile
-# predates the @img/sharp-darwin-arm64 optionalDependency added to package.json,
-# so a frozen install would be rejected as out of sync. Everything else has been
-# unchanged since the lockfile was generated.
 COPY package.json bun.lockb ./
 RUN bun install --production
 
